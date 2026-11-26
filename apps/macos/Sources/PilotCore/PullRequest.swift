@@ -148,6 +148,17 @@ extension SessionSummary {
         return pullRequest.map { [$0] } ?? []
     }
 
+    /// Done the GitHub way: every PR of the chat has settled and at least one merged. The latest merge time, or the
+    /// archive time when GitHub reported none. Nil while work is open or every PR was closed unmerged.
+    public var doneAt: Double? {
+        guard hasTerminalPullRequest else { return nil }
+        let merged = linkedPullRequests.filter { $0.state == .merged }
+        guard !merged.isEmpty else { return nil }
+        return merged.compactMap(\.mergedAt).max() ?? archivedAt ?? updatedAt
+    }
+
+    public var isDone: Bool { doneAt != nil }
+
     /// The PR ⌘⇧P opens: the newest open one, else the newest of any state. GitHub numbers grow with each new PR,
     /// so the highest number is the latest. PRs whose URL is unsafe to open are skipped.
     public var latestPullRequest: SessionPullRequest? {

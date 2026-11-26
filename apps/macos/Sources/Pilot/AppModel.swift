@@ -6,6 +6,8 @@ import PilotTelemetry
 
 enum InspectorTab: Hashable {
     case changes
+    /// The read-only file browser: workspace tree, file viewer and per-file diff.
+    case files
     case terminal
     case artifacts
     case agents
@@ -14,7 +16,7 @@ enum InspectorTab: Hashable {
     /// The control chat's watches and audited actions.
 
     func isAvailable(for session: SessionSummary) -> Bool {
-        if self == .changes || self == .terminal { return session.supportsChanges }
+        if self == .changes || self == .terminal || self == .files { return session.supportsChanges }
         if self == .mission { return session.missionId != nil && !session.isMissionCoordinator }
         return !session.isAsk || self == .artifacts || self == .links
     }
@@ -65,6 +67,9 @@ final class AppModel: ObservableObject {
     private var editingComposerId: String?
     /// In-memory brief drafts outlive tab and page navigation, independently for each mission.
     var missionBriefEditors: [String: BriefEditorState] = [:]
+    /// Files pane state per chat (expanded folders, open file, filter), kept across tabs and chats. Bounded.
+    var fileBrowsers: [String: FilesModel] = [:]
+    var fileBrowserOrder: [String] = []
     private var knownScheduleStates: [String: ScheduleState] = [:]
     @Published private(set) var reviewRevision = 0
     @Published private(set) var navigationHistory = NavigationHistory(NavigationLocation())
@@ -1492,6 +1497,8 @@ extension AppModel {
         case .inbox:
             location.filterHost = inboxHost
             location.inboxProjectId = inboxProjectId
+        case .usage:
+            location.workflowPage = workflowPage
         default: break
         }
         return location
@@ -1541,7 +1548,7 @@ extension AppModel {
             archiveMissionId = missionId
             showingArchive = true
         case .usage:
-            showUsage()
+            if let page = location.workflowPage { showWorkflow(page) } else { showUsage() }
         case .inbox:
             showInbox(for: location.inboxProjectId, context: context)
             inboxProjectId = location.inboxProjectId

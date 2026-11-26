@@ -11,11 +11,11 @@ struct ChatsPage: View {
     /// Project id, or "" for the home folder.
     @AppStorage("chats.projectId") private var projectId = ""
     @AppStorage("chats.build") private var build = false
-    @State private var message = ""
-    @State private var agent: ComposerAgent?
+    @PageState("chats.message") private var message = ""
+    @PageState("chats.agent") private var agent: ComposerAgent? = nil
     @State private var sending = false
     @State private var error: String?
-    @State private var search = ""
+    @PageState("chats.search") private var search = ""
 
     /// A chat is free when it has no isolated workspace and no mission: Ask, the current checkout, or a folder.
     static func isFree(_ session: SessionSummary) -> Bool {

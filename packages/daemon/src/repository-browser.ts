@@ -2,13 +2,21 @@ import { constants } from "node:fs";
 import { lstat, open, opendir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
-import type { RepositoryDirectoryPage, RepositorySelection, SessionFileContent } from "@pilot/protocol";
+import type {
+	RepositoryDirectoryPage,
+	RepositorySelection,
+	SessionFileContent,
+	WorkspaceTreeEntry,
+	WorkspaceTreePage,
+} from "@pilot/protocol";
 import { ServiceUnavailable } from "./errors.ts";
 import type { ProjectStore } from "./projects.ts";
 
 const MAX_FILE = 512 * 1024;
 const SCAN_LIMIT = 4096;
 const PAGE_SIZE = 100;
+/** Entries one tree level returns; larger directories are truncated, like an editor's file explorer. */
+const TREE_LIMIT = 2000;
 
 /** Strict lexical paths plus no symlink components, anchored to a server-owned canonical root. */
 export async function scopedPath(root: string, path: string, allowRoot = false): Promise<string> {
@@ -87,6 +95,34 @@ export class RepositoryBrowser {
 				truncated,
 				...(offset + PAGE_SIZE < entries.length ? { nextOffset: offset + PAGE_SIZE } : {}),
 			};
+		});
+	}
+	/** One level of `root`, for the Files view. Lazy: the client asks for each directory it expands. */
+	async tree(root: string, path: string): Promise<WorkspaceTreePage> {
+		return this.admitted(async () => {
+			const directory = await scopedPath(root, path, true);
+			const dir = await opendir(directory);
+			const entries: WorkspaceTreeEntry[] = [];
+			let seen = 0;
+			let truncated = false;
+			for await (const entry of dir) {
+				if (++seen > SCAN_LIMIT || entries.length >= TREE_LIMIT) {
+					truncated = true;
+					break;
+				}
+				if (entry.name === ".git" || entry.isSymbolicLink()) continue;
+				const kind = entry.isDirectory() ? "directory" : entry.isFile() ? "file" : undefined;
+				if (kind) entries.push({ name: entry.name, path: path ? `${path}/${entry.name}` : entry.name, kind });
+			}
+			if ((await scopedPath(root, path, true)) !== directory) throw new Error("Directory changed while reading");
+			entries.sort((a, b) =>
+				a.kind === b.kind
+					? a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true })
+					: a.kind === "directory"
+						? -1
+						: 1,
+			);
+			return { path, entries, truncated };
 		});
 	}
 	async selection(selection: RepositorySelection): Promise<string> {

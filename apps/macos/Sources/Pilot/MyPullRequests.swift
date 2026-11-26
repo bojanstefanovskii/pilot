@@ -27,8 +27,8 @@ struct MyPullRequests: Decodable, Sendable { let pullRequests: [MyPullRequest] }
 struct PullRequestsPage: View {
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
-    @State private var projectId: String?
-    @State private var prs: [MyPullRequest] = []
+    @PageState("pullRequests.projectId") private var projectId: String? = nil
+    @PageState("pullRequests.prs") private var prs: [MyPullRequest] = []
     @State private var loading = false
     @State private var error: String?
 

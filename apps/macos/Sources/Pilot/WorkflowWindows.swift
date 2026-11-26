@@ -13,8 +13,8 @@ struct ReviewsView: View {
     static let windowID = "reviews"
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
-    @State private var projectId: String?
-    @State private var requests: [PullRequestReviewRequest] = []
+    @PageState("reviews.projectId") private var projectId: String? = nil
+    @PageState("reviews.requests") private var requests: [PullRequestReviewRequest] = []
     @State private var loading = false
     @State private var error: String?
     @State private var testing: Int?

@@ -11,6 +11,7 @@ export const ARTIFACT_SKILL_REFERENCES = [
 	"swiftui.md",
 	"images.md",
 	"shaders.md",
+	"summary.md",
 ].map((name) => fileURLToPath(new URL(`../skills/pilot-artifacts/references/${name}`, import.meta.url)));
 
 /** The exact bundled skill documents. Ask may read these paths and nothing else outside its source. */

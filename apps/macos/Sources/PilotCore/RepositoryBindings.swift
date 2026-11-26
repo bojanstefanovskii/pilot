@@ -24,6 +24,28 @@ public struct SessionFileContent: Codable, Equatable, Sendable {
     public let binary: Bool
 }
 
+/// One entry of a session workspace level (GET /api/sessions/:id/tree).
+public struct WorkspaceTreeEntry: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public enum Kind: String, Codable, Sendable { case file, directory }
+    public var id: String { path }
+    public let name: String
+    public let path: String
+    public let kind: Kind
+
+    public init(name: String, path: String, kind: Kind) {
+        self.name = name
+        self.path = path
+        self.kind = kind
+    }
+}
+
+/// One level of a session workspace, directories first, without `.git` or symlinks.
+public struct WorkspaceTreePage: Codable, Equatable, Sendable {
+    public let path: String
+    public let entries: [WorkspaceTreeEntry]
+    public let truncated: Bool
+}
+
 public struct SessionPathCandidates: Codable, Equatable, Sendable {
     public struct Entry: Codable, Equatable, Sendable {
         public let path: String

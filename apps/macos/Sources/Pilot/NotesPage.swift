@@ -10,7 +10,7 @@ struct NotesPage: View {
 
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
-    @State private var tab: Tab = .notes
+    @PageState("notes.tab") private var tab: Tab = .notes
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,16 +79,16 @@ private enum NotesStorage {
 }
 
 private struct NotesBrowser: View {
-    @State private var folders: [String] = []
-    @State private var notes: [NoteFile] = []
-    @State private var folder = "Notes"
-    @State private var search = ""
-    @State private var selected: URL?
-    @State private var text = ""
+    @PageState("notes.folders") private var folders: [String] = []
+    @PageState("notes.notes") private var notes: [NoteFile] = []
+    @PageState("notes.folder") private var folder = "Notes"
+    @PageState("notes.search") private var search = ""
+    @PageState("notes.selected") private var selected: URL? = nil
+    @PageState("notes.text") private var text = ""
     @State private var saving: Task<Void, Never>?
     @State private var newFolder = ""
     @State private var addingFolder = false
-    @State private var collapsed: Set<String> = []
+    @PageState("notes.collapsed") private var collapsed: Set<String> = []
 
     private var shown: [NoteFile] {
         guard !search.isEmpty else { return notes }
@@ -170,7 +170,12 @@ private struct NotesBrowser: View {
             }
             .frame(minWidth: 360)
         }
-        .task { await reload() }
+        .task {
+            await reload()
+            // Agents and Finder may have changed the open note while the page was away.
+            if let selected, saving == nil { text = (try? String(contentsOf: selected, encoding: .utf8)) ?? text }
+        }
+        .onDisappear { flush() }
         .alert("New Folder", isPresented: $addingFolder) {
             TextField("Name", text: $newFolder)
             Button("Create") { createFolder() }
@@ -258,9 +263,9 @@ private struct NotesBrowser: View {
 
 private struct ArtifactsBrowser: View {
     @ObservedObject var client: PilotClient
-    @State private var artifacts: [ArtifactSummary] = []
-    @State private var search = ""
-    @State private var selected: ArtifactSummary?
+    @PageState("notes.artifacts") private var artifacts: [ArtifactSummary] = []
+    @PageState("notes.artifactSearch") private var search = ""
+    @PageState("notes.artifactSelected") private var selected: ArtifactSummary? = nil
 
     var body: some View {
         HSplitView {
@@ -316,7 +321,7 @@ private struct ArtifactsBrowser: View {
 
 private struct FilesBrowser: View {
     nonisolated static let root = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Pilot/Files")
-    @State private var files: [URL] = []
+    @PageState("notes.files") private var files: [URL] = []
     @State private var targeted = false
 
     var body: some View {

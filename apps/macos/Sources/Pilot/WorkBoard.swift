@@ -9,7 +9,9 @@ struct WorkBoardView: View {
     let kind: Kind
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
-    @State private var showDone = false
+    @ObservedObject private var pageStates = PageStateStore.shared
+    /// How long finished work stays on the board.
+    static let doneWindow: Double = 30 * 24 * 3600 * 1000
 
     private var title: String {
         switch kind {
@@ -19,22 +21,45 @@ struct WorkBoardView: View {
         }
     }
 
+    /// Shown by default and remembered per board while the app runs.
+    private var showDone: Binding<Bool> {
+        let key = "workBoard.\(kind.rawValue).showDone"
+        return Binding(get: { pageStates.value(key, default: true) }, set: { pageStates.set(key, $0) })
+    }
+
+    private var since: Double { Date().timeIntervalSince1970 * 1000 - Self.doneWindow }
+
     /// Build chats of this kind, mission members excluded: they belong to their mission's card.
+    private var kindChats: [SessionSummary] {
+        client.sessions.filter { session in
+            guard session.projectId != nil, !session.isAsk, session.missionId == nil,
+                  !session.isMissionCoordinator, !ChatsPage.isFree(session) else { return false }
+            return kind == .quickFixes ? session.kind == .quick : session.kind != .quick
+        }
+    }
+
     private var chats: [SessionSummary] {
-        client.sessions
-            .filter { session in
-                guard !session.isArchived, session.projectId != nil, !session.isAsk, session.missionId == nil,
-                      !session.isMissionCoordinator, !ChatsPage.isFree(session) else { return false }
-                return kind == .quickFixes ? session.kind == .quick : session.kind != .quick
-            }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        kindChats.filter { !$0.isArchived && !$0.isDone }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    /// Chats whose PRs merged on GitHub. Merged chats are archived automatically, so they come from the archive too.
+    private var doneChats: [SessionSummary] {
+        kindChats.compactMap { session in session.doneAt.flatMap { $0 >= since ? (session, $0) : nil } }
+            .sorted { $0.1 > $1.1 }.map(\.0)
     }
 
     private var missions: [Mission] {
-        client.missions
-            .filter { $0.archivedAt == nil && (showDone || $0.completedAt == nil) }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        client.missions.filter { $0.archivedAt == nil && !Self.isDone($0) }.sorted { $0.updatedAt > $1.updatedAt }
     }
+
+    private var doneMissions: [Mission] {
+        client.missions.filter { $0.archivedAt == nil && Self.isDone($0) && ($0.completedAt ?? $0.updatedAt) >= since }
+            .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
+    }
+
+    static func isDone(_ mission: Mission) -> Bool { mission.status == .done || mission.completedAt != nil }
+
+    private var doneCount: Int { kind == .missions ? doneMissions.count : doneChats.count }
 
     private let columns = [GridItem(.adaptive(minimum: 260, maximum: 360), spacing: 12)]
 
@@ -46,26 +71,41 @@ struct WorkBoardView: View {
                     Text("\(kind == .missions ? missions.count : chats.count)")
                         .font(.pilot(.title)).foregroundStyle(Theme.mutedForeground)
                     Spacer()
-                    if kind == .missions { Toggle("Show completed", isOn: $showDone).toggleStyle(.checkbox) }
+                    Toggle("Show done", isOn: showDone).toggleStyle(.checkbox)
                 }
                 if (kind == .missions ? missions.isEmpty : chats.isEmpty) {
                     Text(emptyText).foregroundStyle(Theme.mutedForeground)
                 }
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                    if kind == .missions {
-                        ForEach(missions) { mission in MissionCard(mission: mission, client: client) { model.openMission(mission.id) } }
-                    } else {
-                        ForEach(chats) { session in
-                            ChatCard(session: session, signal: session.signal(unread: model.isUnread(session))) {
-                                model.open(session: session.id)
-                            }
-                        }
+                grid(done: false)
+                if showDone.wrappedValue, doneCount > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.done)
+                        Text("Done").font(.pilot(.body, weight: .semibold))
+                        Text("\(doneCount)").foregroundStyle(Theme.mutedForeground)
+                        Text("· last 30 days").font(.pilot(.caption)).foregroundStyle(Theme.faintForeground)
                     }
+                    .padding(.top, 8)
+                    grid(done: true)
                 }
             }
             .padding(24)
         }
         .background(Theme.background)
+    }
+
+    private func grid(done: Bool) -> some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+            if kind == .missions {
+                ForEach(done ? doneMissions : missions) { mission in
+                    MissionCard(mission: mission, client: client, done: done) { model.openMission(mission.id) }
+                }
+            } else {
+                ForEach(done ? doneChats : chats) { session in
+                    ChatCard(session: session, signal: done ? nil : session.signal(unread: model.isUnread(session)),
+                             done: done) { model.open(session: session.id) }
+                }
+            }
+        }
     }
 
     private var emptyText: String {
@@ -79,6 +119,7 @@ struct WorkBoardView: View {
 
 /// The card frame shared by chats and missions.
 private struct WorkCard<Content: View>: View {
+    var done = false
     let action: () -> Void
     @ViewBuilder let content: Content
     @State private var hovered = false
@@ -89,8 +130,15 @@ private struct WorkCard<Content: View>: View {
                 .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: Theme.Radius.card).fill(Theme.card))
+                // Done work keeps the card neutral and wears a violet leading edge, like a merged PR.
+                .overlay(alignment: .leading) {
+                    if done {
+                        UnevenRoundedRectangle(topLeadingRadius: Theme.Radius.card, bottomLeadingRadius: Theme.Radius.card)
+                            .fill(Theme.done).frame(width: 3)
+                    }
+                }
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card)
-                    .stroke(hovered ? Theme.mutedForeground.opacity(0.4) : Theme.border))
+                    .stroke(hovered ? Theme.mutedForeground.opacity(0.4) : done ? Theme.done.opacity(0.35) : Theme.border))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -101,10 +149,11 @@ private struct WorkCard<Content: View>: View {
 private struct ChatCard: View {
     let session: SessionSummary
     let signal: SessionSignal?
+    var done = false
     let open: () -> Void
 
     var body: some View {
-        WorkCard(action: open) {
+        WorkCard(done: done, action: open) {
             HStack(spacing: 6) {
                 if let source = session.trackedSource {
                     Text(source.label).font(.pilot(.caption, weight: .medium)).foregroundStyle(Theme.mutedForeground)
@@ -117,19 +166,21 @@ private struct ChatCard: View {
                 .lineLimit(3).multilineTextAlignment(.leading)
             Spacer(minLength: 0)
             HStack(spacing: 8) {
-                Text(stateText).font(.pilot(.caption)).foregroundStyle(signal?.tint ?? Theme.mutedForeground)
+                Text(stateText).font(.pilot(.caption, weight: done ? .medium : .regular))
+                    .foregroundStyle(done ? Theme.done : signal?.tint ?? Theme.mutedForeground)
                 if let pr = session.latestPullRequest {
                     Label("#\(pr.number)", icon: PilotIcon.pullRequest).font(.pilot(.caption)).foregroundStyle(Theme.mutedForeground)
                 }
                 Spacer()
-                Text(RelativeDate.ago(session.updatedAt))
+                Text(RelativeDate.ago(done ? session.doneAt ?? session.updatedAt : session.updatedAt))
                     .font(.pilot(.caption)).foregroundStyle(Theme.faintForeground)
             }
         }
     }
 
     private var stateText: String {
-        switch signal {
+        if done { return "Merged" }
+        return switch signal {
         case .working?: "Working"
         case .needsYou?: "Needs you"
         case .failed?: "Failed"
@@ -142,10 +193,11 @@ private struct ChatCard: View {
 private struct MissionCard: View {
     let mission: Mission
     @ObservedObject var client: PilotClient
+    var done = false
     let open: () -> Void
 
     var body: some View {
-        WorkCard(action: open) {
+        WorkCard(done: done, action: open) {
             HStack(spacing: 6) {
                 Text(client.project(mission.projectId)?.name ?? "").font(.pilot(.caption, weight: .medium))
                     .foregroundStyle(Theme.mutedForeground)
@@ -157,17 +209,19 @@ private struct MissionCard: View {
             Spacer(minLength: 0)
             if let total = mission.tasksTotal, total > 0 {
                 let done = mission.tasksDone ?? 0
-                ProgressView(value: Double(done), total: Double(total)).progressViewStyle(.linear).tint(Theme.brand)
+                ProgressView(value: Double(done), total: Double(total)).progressViewStyle(.linear)
+                    .tint(self.done ? Theme.done : Theme.brand)
                 HStack {
-                    Text("\(done)/\(total) tasks").font(.pilot(.caption)).foregroundStyle(Theme.mutedForeground)
+                    Text(self.done ? "Done · \(done)/\(total) tasks" : "\(done)/\(total) tasks").font(.pilot(.caption))
+                        .foregroundStyle(self.done ? Theme.done : Theme.mutedForeground)
                     Spacer()
                     if let reason = mission.needsYouReason {
                         Text(reason).font(.pilot(.caption)).foregroundStyle(Theme.warning).lineLimit(1)
                     }
                 }
             } else {
-                Text(mission.completedAt == nil ? "Planning" : "Completed").font(.pilot(.caption))
-                    .foregroundStyle(Theme.mutedForeground)
+                Text(done ? "Done" : "Planning").font(.pilot(.caption, weight: done ? .medium : .regular))
+                    .foregroundStyle(done ? Theme.done : Theme.mutedForeground)
             }
         }
     }

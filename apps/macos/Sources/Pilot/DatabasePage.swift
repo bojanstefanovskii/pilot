@@ -47,16 +47,19 @@ private struct DatabaseTable: Hashable {
 struct DatabasePage: View {
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
-    @State private var projectId: String?
-    @State private var connections: [DatabaseConnection] = []
-    @State private var connection: DatabaseConnection?
-    @State private var tables: [DatabaseTable] = []
-    @State private var tableFilter = ""
-    @State private var selectedTable: DatabaseTable?
-    @State private var showStructure = false
-    @State private var sql = ""
-    @State private var result: DatabaseQueryResult?
-    @State private var elapsed: Double?
+    @PageState("database.projectId") private var projectId: String? = nil
+    @PageState("database.connections") private var connections: [DatabaseConnection] = []
+    @PageState("database.connection") private var connection: DatabaseConnection? = nil
+    @PageState("database.tables") private var tables: [DatabaseTable] = []
+    @PageState("database.tableFilter") private var tableFilter = ""
+    @PageState("database.selectedTable") private var selectedTable: DatabaseTable? = nil
+    @PageState("database.showStructure") private var showStructure = false
+    @PageState("database.sql") private var sql = ""
+    @PageState("database.result") private var result: DatabaseQueryResult? = nil
+    @PageState("database.elapsed") private var elapsed: Double? = nil
+    /// The project and connection whose connections and tables are loaded, so coming back does not reload them.
+    @PageState("database.loadedProjectId") private var loadedProjectId: String? = nil
+    @PageState("database.tablesConnectionId") private var tablesConnectionId: String? = nil
     @State private var running = false
     @State private var error: String?
 
@@ -91,9 +94,14 @@ struct DatabasePage: View {
         .background(Theme.background)
         .task(id: projectId) {
             if projectId == nil { projectId = model.selectedProjectId ?? client.projects.first?.id; return }
+            guard loadedProjectId != projectId || connections.isEmpty else { return }
             await loadConnections()
+            loadedProjectId = projectId
         }
-        .task(id: connection) { await loadTables() }
+        .task(id: connection) {
+            guard tablesConnectionId != connection?.id || tables.isEmpty else { return }
+            await loadTables()
+        }
     }
 
     // MARK: Connections
@@ -280,6 +288,7 @@ struct DatabasePage: View {
                 guard let schema = row["table_schema"]?.string, let name = row["table_name"]?.string else { return nil }
                 return DatabaseTable(schema: schema, name: name)
             }
+            tablesConnectionId = connection.id
         } catch { if !error.isCancellation { self.error = error.localizedDescription } }
     }
 

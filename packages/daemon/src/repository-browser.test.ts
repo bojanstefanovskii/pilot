@@ -65,3 +65,31 @@ test("same paths on distinct daemon roots never share projects or file content",
 	assert.equal((await remote.file(join(home, "remote", "repo"), "same.txt")).text, "remote");
 	await assert.rejects(remote.file(join(home, "remote", "repo"), "../../local/repo/same.txt"));
 });
+test("tree lists one level, directories first, without .git or symlinks, and stays in scope", async (t) => {
+	const home = await mkdtemp(join(tmpdir(), "pilot-tree-"));
+	t.after(() => rm(home, { recursive: true, force: true }));
+	const root = join(home, "root");
+	const outside = join(home, "outside");
+	await mkdir(join(root, ".git"), { recursive: true });
+	await mkdir(join(root, "src"));
+	await mkdir(outside);
+	await writeFile(join(root, "README.md"), "# hi");
+	await writeFile(join(root, ".env.example"), "A=1");
+	await writeFile(join(root, "src", "main.ts"), "export {}");
+	await symlink(outside, join(root, "link"));
+	const browser = new RepositoryBrowser(new ProjectStore(home), root);
+	const top = await browser.tree(root, "");
+	assert.deepEqual(
+		top.entries.map((entry) => [entry.name, entry.kind]),
+		[
+			["src", "directory"],
+			[".env.example", "file"],
+			["README.md", "file"],
+		],
+	);
+	assert.equal(top.truncated, false);
+	assert.deepEqual((await browser.tree(root, "src")).entries, [
+		{ name: "main.ts", path: "src/main.ts", kind: "file" },
+	]);
+	for (const path of ["..", "link", "/etc", "src/../.."]) await assert.rejects(browser.tree(root, path));
+});

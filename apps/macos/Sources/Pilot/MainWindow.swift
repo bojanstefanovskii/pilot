@@ -241,6 +241,14 @@ struct SessionDetail: View {
                 }
             }
             SessionInspectorActions(session: session)
+            // Merged on GitHub: the moment to write down what was done.
+            if context == nil || context?.host == model.localHost, session.isDone, session.missionId == nil {
+                ToolbarItem(placement: .primaryAction) {
+                    WriteSummaryButton(target: .session(session.id), label: "Write summary")
+                        .labelStyle(.titleAndIcon)
+                        .environmentObject(model)
+                }
+            }
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed, placement: .primaryAction)
             }
@@ -324,6 +332,7 @@ struct SessionInspectorControls: View {
         }
         if session.supportsChanges {
             InspectorToggle(tab: .changes, icon: PilotIcon.changes, help: "Changes (⇧⌘D)")
+            InspectorToggle(tab: .files, icon: PilotIcon.code, help: "Files")
             InspectorToggle(tab: .terminal, icon: PilotIcon.terminal, help: "Terminal (⌘J)")
         }
         if !session.isAsk {
@@ -350,6 +359,11 @@ struct SessionMoreActions: View {
             Divider()
             SessionMissionActions(session: session)
             Divider()
+            if hostContext == nil || hostContext?.host == model.localHost, !session.isAsk, session.missionId == nil,
+               !session.isRetainedHistory {
+                WriteSummaryButton(target: .session(session.id))
+                Divider()
+            }
             SessionArchiveAction(session: session)
             if session.isArchived {
                 Button { model.showArchive(in: model.archiveProjectId, missionId: model.archiveMissionId) } label: {
@@ -441,6 +455,10 @@ struct Inspector: View {
                     .opacity(model.inspectorTab == .terminal ? 1 : 0)
                     .allowsHitTesting(model.inspectorTab == .terminal)
                     .accessibilityHidden(model.inspectorTab != .terminal)
+            }
+            if model.inspectorTab == .files, session.supportsChanges {
+                FilesPane(session: session, model: model.fileBrowser(for: session.id))
+                    .id(session.id)
             }
             if model.inspectorTab == .artifacts {
                 SessionArtifactsPane(sessionId: session.id, client: endpoint)

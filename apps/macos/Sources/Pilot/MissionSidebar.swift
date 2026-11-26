@@ -28,7 +28,7 @@ struct MissionSidebarRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         PilotSymbol(PilotIcon.mission, context: .row)
-                            .foregroundStyle(active ? Theme.foreground : Theme.faintForeground)
+                            .foregroundStyle(active ? Theme.foreground : mission.status == .done ? Theme.done : Theme.faintForeground)
                             .frame(width: 14)
                         Text(mission.title)
                             .font(.pilot(.body, weight: .medium))

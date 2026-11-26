@@ -9,12 +9,12 @@ struct SprintBoardView: View {
     static let windowID = "sprint"
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
-    @State private var projectId: String?
-    @State private var items: [TrackedItem] = []
+    @PageState("sprint.projectId") private var projectId: String? = nil
+    @PageState("sprint.items") private var items: [TrackedItem] = []
     @State private var loading = false
     @State private var error: String?
     @State private var starting: String?
-    @State private var collapsed: Set<String> = []
+    @PageState("sprint.collapsed") private var collapsed: Set<String> = []
 
     private var projects: [Project] { client.projects.filter { !($0.tracking?.linearTeam ?? "").isEmpty } }
 
@@ -367,7 +367,7 @@ private struct PriorityIcon: View {
             switch priority ?? 0 {
             case 1:
                 RoundedRectangle(cornerRadius: 2).fill(Theme.warning)
-                    .overlay(Text("!").font(.system(size: 9, weight: .bold)).foregroundStyle(.white))
+                    .overlay(Text("!").font(.pilot(.micro, weight: .bold)).foregroundStyle(.white))
                     .frame(width: 12, height: 12)
             case 2, 3, 4:
                 let filled = 5 - (priority ?? 4)
@@ -398,7 +398,7 @@ private struct StatusIcon: View {
             switch type {
             case "completed":
                 Circle().fill(Theme.brand)
-                Image(systemName: "checkmark").font(.system(size: 7, weight: .bold)).foregroundStyle(.white)
+                Image(systemName: "checkmark").font(.pilot(.glyph, weight: .bold)).foregroundStyle(.white)
             case "started":
                 Circle().stroke(review ? Theme.success : Theme.warning, lineWidth: 1.5)
                 Circle().trim(from: 0, to: review ? 0.75 : 0.5)

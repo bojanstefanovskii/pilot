@@ -6,11 +6,11 @@ import SwiftUI
 /// Local observations only; no other execution mode is offered.
 struct UsageDashboardPage: View {
     @StateObject private var dashboard: UsageDashboardModel
-    @State private var window = UsageDashboardWindow.preset(days: 7, now: Date())
-    @State private var period = "7 days"
-    @State private var filters: UsageQueryFilters?
+    @PageState("usage.window") private var window = UsageDashboardWindow.preset(days: 7, now: Date())
+    @PageState("usage.period") private var period = "7 days"
+    @PageState("usage.filters") private var filters: UsageQueryFilters? = nil
     @State private var scopeLabels: [String: String] = [:]
-    @State private var customRange = false
+    @PageState("usage.customRange") private var customRange = false
     @State private var pendingRequests = false
     @AppStorage("usageDashboardBreakdown") private var expanded = "project"
 

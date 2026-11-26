@@ -11,6 +11,7 @@ The `artifact` tool publishes session-local, offline artifacts. Pass source dire
 - HTML and React pages and web libraries: [references/web.md](references/web.md)
 - Native SwiftUI layouts and UI previews: [references/swiftui.md](references/swiftui.md)
 - PNG, JPEG, GIF or WebP images: [references/images.md](references/images.md)
+- Work summaries asked from Pilot's Write summary button: [references/summary.md](references/summary.md)
 - Standalone GLSL shader artifacts (Shadertoy-style `mainImage`; inside a visual use `ui.shader`): [references/shaders.md](references/shaders.md)
 
 ## Sandbox and Ask mode

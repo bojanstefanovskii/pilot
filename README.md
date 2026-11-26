@@ -141,6 +141,15 @@ the daemon report; check, sign-in and setup actions are not included. See the
   terminal in the session workspace, task progress and pull request status. Attach a pull request in Changes
   using its GitHub link or just its number (`123` or `#123`) in the project's GitHub repository.
   Chats open with recent messages; **Show earlier messages** reveals older pages without changing agent context.
+- **Browse files without editing.** The **Files** inspector is a read-only file browser for a Build chat's
+  workspace: a lazily loaded tree with changed files marked, a filter, and the open file with syntax colors, line
+  numbers and ⌘F, or its diff.
+- **See what is done.** Chats whose pull requests merged on GitHub and missions marked done appear in violet under
+  **Done** on the Missions, Features and Quick fixes boards. **Write summary** (on a merged chat or done mission,
+  and in the actions menus) asks the agent to write what was done as an artifact; for a mission the coordinator
+  writes it and attaches it to the mission. It never runs on its own.
+- **Pick up where you left off.** Workflow pages (Today, Sprint, Database, Notes…) keep their project, filters,
+  drafts and loaded data while the app runs, and Back returns to the page you left.
 - **Coordinate bigger goals.** Missions group chats around a shared brief, decisions, tasks, dependencies,
   artifacts and activity, with an optional coordinator agent. One logical mission list stays visible regardless
   of a chat's stored execution identity. Synced mission evidence retains its canonical identity; disconnected or

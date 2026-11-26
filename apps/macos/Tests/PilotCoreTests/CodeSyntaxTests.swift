@@ -28,7 +28,7 @@ import Testing
 
 @Test func leavesUnknownLanguagesAndToolOutputPlain() {
     let source = "const true = 'hello'; // not necessarily JavaScript"
-    for language: String? in [nil, "", "arguments", "python", "shell"] {
+    for language: String? in [nil, "", "arguments", "shell", "text"] {
         #expect(CodeSyntax.tokens(source, language: language) == [.init(text: source, kind: nil)])
     }
 }
@@ -84,4 +84,22 @@ import Testing
         return
     }
     #expect(CodeSyntax.tokens(source, language: language).contains(.init(text: "await", kind: .keyword)))
+}
+
+@Test func highlightsOtherLanguagesByFileExtension() {
+    #expect(CodeSyntax.language(forPath: "Sources/App/Main.swift") == "swift")
+    #expect(CodeSyntax.language(forPath: "scripts/run.py") == "py")
+    #expect(CodeSyntax.language(forPath: "Dockerfile") == "sh")
+    #expect(CodeSyntax.language(forPath: "notes.unknownext") == nil)
+    let swift = CodeSyntax.tokens("let name = \"Pilot\" // greeting", language: "swift")
+    #expect(swift.contains(.init(text: "let", kind: .keyword)))
+    #expect(swift.contains(.init(text: "\"Pilot\"", kind: .string)))
+    #expect(swift.contains(.init(text: "// greeting", kind: .comment)))
+    let python = CodeSyntax.tokens("def run():\n    return None  # done", language: "py")
+    #expect(python.contains(.init(text: "def", kind: .keyword)))
+    #expect(python.contains(.init(text: "None", kind: .literal)))
+    #expect(python.contains(.init(text: "# done", kind: .comment)))
+    let sql = CodeSyntax.tokens("SELECT id FROM users -- all", language: "sql")
+    #expect(sql.contains(.init(text: "SELECT", kind: .keyword)))
+    #expect(sql.contains(.init(text: "-- all", kind: .comment)))
 }

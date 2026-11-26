@@ -52,4 +52,6 @@ struct NavigationLocation: Equatable {
     /// Inbox and archive have an independent host and filter, not the current chat's host.
     var filterHost: HostRef?
     var inboxProjectId: String?
+    /// The workflow page (Today, Sprint…) shown in place of Usage, so Back returns to it.
+    var workflowPage: WorkflowPage?
 }

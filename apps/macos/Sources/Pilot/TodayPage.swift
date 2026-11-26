@@ -7,7 +7,7 @@ import SwiftUI
 struct TodayView: View {
     static let windowID = "today"
     @ObservedObject var model: AppModel
-    @State private var page: TodayPage?
+    @PageState("today.page") private var page: TodayPage? = nil
     @State private var error: String?
     @State private var settingUp = false
     @State private var setupDone = false

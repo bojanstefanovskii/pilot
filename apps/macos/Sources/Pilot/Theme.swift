@@ -81,6 +81,9 @@ enum Theme {
     static let pullRequestOpen = Color(light: 0x15803D, dark: 0x4ADE80)
     static let pullRequestMerged = Color(light: 0x7C3AED, dark: 0xA78BFA)
     static let pullRequestClosed = Color(light: 0xB91C1C, dark: 0xF87171)
+    /// Finished work: a mission marked done, or a chat whose PRs merged on GitHub. The merged violet, so done reads
+    /// the same on cards, sidebar rows and PR badges. Tint marks and a thin edge; never fill large areas with it.
+    static let done = pullRequestMerged
 
     /// Agent visuals' text tokens (docs/native-visuals.md): ink readable on the chat background in both appearances.
     /// `accent` marks links and emphasized figures; `danger` uses `error`. Chrome keeps its neutral palette.

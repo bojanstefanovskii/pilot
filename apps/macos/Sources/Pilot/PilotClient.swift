@@ -324,6 +324,16 @@ final class PilotClient: ObservableObject {
         return project
     }
 
+    /// One level of the session's workspace, for the Files pane.
+    func tree(_ sessionId: String, path: String) async throws -> WorkspaceTreePage {
+        guard let baseURL else { throw HostRoutingError.disconnected }
+        var url = URLComponents(url: baseURL.appending(path: "api/sessions/\(sessionId)/tree"), resolvingAgainstBaseURL: false)!
+        url.queryItems = [URLQueryItem(name: "path", value: path)]
+        let value: WorkspaceTreePage = try await get(url.url!)
+        guard value.path == path else { throw HostRoutingError.invalidReference }
+        return value
+    }
+
     func file(_ sessionId: String, path: String) async throws -> SessionFileContent {
         guard let baseURL else { throw HostRoutingError.disconnected }
         var url = URLComponents(url: baseURL.appending(path: "api/sessions/\(sessionId)/files"), resolvingAgainstBaseURL: false)!
@@ -823,6 +833,19 @@ final class PilotClient: ObservableObject {
             "api/sessions/\(sessionId)/pull-request-actions", body: PullRequestActionRequest(action: action, url: url)
         )
         update(session)
+    }
+
+    /// Asks the chat's agent to write a summary artifact of what it did. Only ever on the user's request.
+    func writeSummary(sessionId: String) async throws {
+        let session: SessionSummary = try await call("api/sessions/\(sessionId)/summary")
+        update(session)
+    }
+
+    /// Asks the mission's coordinator to write and attach the summary. Returns the coordinator chat's id.
+    func writeMissionSummary(_ missionId: String) async throws -> String {
+        let session: SessionSummary = try await call("api/missions/\(missionId)/summary")
+        update(session)
+        return session.id
     }
 
     func reviewThreads(_ sessionId: String, url: String) async throws -> PullRequestReviewThreads {

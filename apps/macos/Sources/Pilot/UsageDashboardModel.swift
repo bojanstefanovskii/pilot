@@ -17,6 +17,9 @@ extension AppModel {
 
     /// Today, Sprint, Reviews or Routines, as a page of the main window.
     func showWorkflow(_ page: WorkflowPage) {
+        // One visited destination: Usage is never recorded on the way to the page.
+        beginNavigation()
+        defer { endNavigation() }
         showUsage()
         workflowPage = page
     }

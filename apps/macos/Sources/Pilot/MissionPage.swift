@@ -140,10 +140,21 @@ private struct MissionToolbar: ToolbarContent {
             .disabled(mission.status != .active)
             .help(mission.status == .active ? "Open a new chat in this mission" : "Reopen the mission to add chats")
         }
+        if hostContext == nil || hostContext?.host == model.localHost, mission.status == .done,
+           mission.coordinatorSessionId != nil {
+            ToolbarItem(placement: .primaryAction) {
+                WriteSummaryButton(target: .mission(mission.id), label: "Write summary")
+                    .labelStyle(.titleAndIcon)
+                    .environmentObject(model)
+            }
+        }
         ToolbarItem(placement: .primaryAction) {
             Menu {
                 MissionEditAction(missionId: mission.id)
                 coordinatorItems
+                if hostContext == nil || hostContext?.host == model.localHost, mission.coordinatorSessionId != nil {
+                    WriteSummaryButton(target: .mission(mission.id))
+                }
                 Button { model.showArchive(in: mission.projectId, missionId: mission.id) } label: {
                     Label("Browse Archived Chats", icon: PilotIcon.archive)
                 }
