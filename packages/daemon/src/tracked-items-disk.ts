@@ -41,6 +41,8 @@ export interface SlackGroupId {
 	checkedAt: number;
 }
 /** A chat's triage source. See SessionTrackedSource. */
+/** Linear state types of a closed ticket; mirrors linear-source.ts. */
+const CLOSED_LINEAR_TYPES = new Set(["completed", "canceled", "duplicate"]);
 export interface TrackedSessionSource {
 	sessionId: string;
 	source: SessionTrackedSource;
@@ -1026,9 +1028,17 @@ export class TrackedItemDisk {
 					: typeof metadata.channelName === "string"
 						? `#${metadata.channelName}`
 						: "Slack";
+			const done = row.kind === "linear" && CLOSED_LINEAR_TYPES.has(String(metadata.statusType));
 			sources.push({
 				sessionId: row.chat,
-				source: { kind: row.kind, itemId: row.id, label, title: row.title.slice(0, 200), url: row.url },
+				source: {
+					kind: row.kind,
+					itemId: row.id,
+					label,
+					title: row.title.slice(0, 200),
+					url: row.url,
+					...(done ? { done } : {}),
+				},
 			});
 		}
 		return sources;

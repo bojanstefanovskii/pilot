@@ -58,16 +58,15 @@ the daemon report; check, sign-in and setup actions are not included. See the
 - **Work locally.** Chats, projects and setup run on this Mac. Remote devboxes are retired.
   Existing cached remote history and unsent drafts are retained without reconnecting or moving work.
   See [retained remote data](docs/devboxes.md).
-- **See what needs you first.** Home shows how every project is doing. The Inbox is the one place to act: chats
-  that need you (each with a short reason), pull requests ready to merge, and Linear and Slack items, across
-  projects or filtered to one. Each project has an Overview that starts with what is next for it.
+- **See what needs you first.** Home shows how every project is doing. Each project has an Overview that starts
+  with what is next for it: chats that need you (each with a short reason) and pull requests ready to merge.
   Right-click a chat and choose **Go to project** to open its project's Overview. Chat menus also copy the
   authoritative session storage path or a canonical Pilot chat link as separate actions, including from cached
   archived and devbox rows when that metadata is available.
 - **Jump anywhere from the keyboard.** ⌘K opens a command palette that leads with places: pages, Slack triage and
   the Linear queue, missions, tasks and projects, then a few recent chats. It searches chats, archived ones
   included (by title, branch, project or pull request number), pages, missions and tasks (`#25`), project scopes,
-  Settings pages, every keyboard shortcut, Linear Inbox items,
+  Settings pages, every keyboard shortcut, open Linear items,
   Slack reports in triage (by summary, channel or message text, newest first, resolved ones included), and actions
   such as new chat, pin, archive, stop, retry, opening the pull request on GitHub or **Merge PR…** for the open chat
   (also available after searching a PR number). Merging asks you to confirm the fresh PR head, target branch and a
@@ -82,11 +81,11 @@ the daemon report; check, sign-in and setup actions are not included. See the
   sidebar", "Focus page" and "Focus inspector" move focus to the other parts of the window. Plain letters are
   never taken as
   shortcuts, so typing, IME input and list type-select behave as in any Mac app. The **Go** menu and ⌘K reach
-  Home, Inbox, the focused project's Overview, the current mission's Overview, Tasks or Brief, Archive, Slack
+  Home, Usage, the focused project's Overview, the current mission's Overview, Tasks or Brief, Archive, Slack
   triage and the Linear queue. Slack triage and the Linear queue open
   the board or queue of the project in view (or the only project tracking it); otherwise ⌘K lists one "Slack
   triage" or "Linear queue" per project ("Linear triage" finds it too). The Linear queue is the project's Linear
-  list in Pilot, not the Linear app. Home, Overview, Inbox and Archive each have one keyboard list: a Go
+  list in Pilot, not the Linear app. Home, Overview and Archive each have one keyboard list: a Go
   destination (or Escape from the composer) focuses it, arrows move the highlight, Return opens the row as a click
   would, and ⌘K lists the
   highlighted chat's actions under its name.
@@ -144,10 +143,13 @@ the daemon report; check, sign-in and setup actions are not included. See the
 - **Browse files without editing.** The **Files** inspector (⇧⌘D) is a read-only file browser for a Build chat's
   workspace: branch and pull request context with one-click PR actions, a lazily loaded tree with changed files
   marked, a filter, and the open file with syntax colors, line numbers and ⌘F, or its diff with line comments.
-- **See what is done.** Chats whose pull requests merged on GitHub and missions marked done appear in violet under
+- **See what is done.** Chats whose pull requests merged on GitHub or whose Linear ticket closed, and missions
+  marked done, appear in violet under
   **Done** on the Missions, Features and Quick fixes boards. **Write summary** (on a merged chat or done mission,
   and in the actions menus) asks the agent to write what was done as an artifact; for a mission the coordinator
   writes it and attaches it to the mission. It never runs on its own.
+- **Chats as tabs.** Every chat you open gets a tab above the conversation, Ghostty-style, with its status mark.
+  ⌘1…⌘9 jump to a tab, ⌘⇧[ and ⌘⇧] move between them, ⌥⌘W closes one. Tabs are kept across launches (at most 12).
 - **Pick up where you left off.** Workflow pages (Today, Sprint, Database, Notes…) keep their project, filters,
   drafts and loaded data while the app runs, and Back returns to the page you left.
 - **Coordinate bigger goals.** Missions group chats around a shared brief, decisions, tasks, dependencies,
@@ -192,7 +194,7 @@ the daemon report; check, sign-in and setup actions are not included. See the
 - **Query your databases.** Give a project's chats read-only or read-write Postgres access per environment,
   granted up front or when you answer the agent's request. See [Databases](#databases).
 - **Bring work into Pilot.** Track Linear issues and Slack messages from configured sources, triage Slack
-  messages by type, label and severity, see what waits on you across projects in one Inbox, then start a chat or
+  messages by type, label and severity, see what waits on you in each project's Overview, then start a chat or
   mission from an item. A chat started from a Slack message shows that message's status in its toolbar (and ⌘K),
   where you mark it In progress, Waiting or Done. Schedule work for later or for wake, online and time triggers.
 - **Light or dark.** Pilot follows the macOS appearance; **Settings → Appearance** can pin light or dark.
@@ -396,15 +398,14 @@ view does not retry or repair anything. See the [public failure-report contract]
 
 ## Working with Pilot
 
-### Home, Inbox and Overview
+### Home and Overview
 
-The sidebar starts with **Home**, the **Inbox** and the project selector. Home covers every project: a short
+The sidebar starts with **Home**, the workflow pages and the project selector. Home covers every project: a short
 summary, subscription usage (with extra-usage spend when the provider reports it), projects (under their folders),
 work in progress, missions and recent activity.
 The new-chat project picker also offers **Home (~)** for chats in your home folder without a project.
 Pilot remembers this choice for later chats, including after restarting. You can still choose a project or **Other Folder…**.
-The Inbox carries the badge and lists, most urgent first, what **Needs you**, what is **Ready to merge**, and your
-Linear and Slack items. Its toolbar filters it to one project. Use **Open on GitHub** in a project's Overview
+Use **Open on GitHub** in a project's Overview
 actions menu or the ⌘K command palette to open its repository in your browser. Pilot resolves the repository
 on demand using GitHub CLI on the project's host, so its remotes and GitHub CLI sign-in must be configured.
 Focusing a project adds its **Overview**, which
@@ -612,7 +613,6 @@ The sidebar also opens **Today** (a daily plan written by three weekday routines
 **Routines** (schedules, including cron routines created with Repeat in Send later). **Chats** holds free chats for
 questions, bugs and small requests: Ask reads the project's current checkout, Build edits it in place (no worktree or
 clone), or either runs in the home folder. They stay out of the Features and Quick fixes boards.
-The Inbox lists chats that need you, PRs ready to merge and Slack; Linear tickets live in Sprint only.
 
 New opted-in mission builder workspaces also record internal durable jj creator attribution.
 This does not adopt existing work. New eligible builder bindings also queue exact committed layers for
@@ -1051,7 +1051,7 @@ without saving it. Searching in Slack triage or ⌘K also matches thread text an
 A message added from a link can come from any channel your Slack account can read. It is classified like a
 polled one (a failed classification is retried; without one, it is added untyped, titled by its first line), and
 stays listed, with its reactions, even when its channel is not tracked.
-Project labels can do nothing, hide messages from the Inbox, or close them locally. Close labels never replace a
+Project labels can do nothing, hide messages (they stay in Slack triage behind Show hidden), or close them locally. Close labels never replace a
 status you chose. Show hidden in Slack triage includes label-closed messages; reopening one teaches the classifier.
 Slack items become Done locally when every PR of a linked chat has merged, or a linked mission completes.
 The row explains why, for example “Done · PR #42 merged”. Closed unmerged PRs change nothing. Already Done or
@@ -1065,8 +1065,8 @@ and Slack's own rate limits, cached classifications and per-refresh batch limits
 A Slack message can also be **Waiting**, when someone outside Pilot (a CSM, the reporter) has to answer first.
 A chat attached to the message (started from it, or linked to it) sets it with its `slack_status` tool and a short
 reason, shown as “Waiting · CSM to confirm the org ID”. Only attached chats have that tool, and it appears or goes
-away as you link or unlink them. You can also pick Waiting yourself. Waiting messages stay out of the
-Inbox. On Slack refreshes, Pilot reads each waiting thread for new replies at most every ten minutes, sharing the
+away as you link or unlink them. You can also pick Waiting yourself. Waiting messages stay out of
+what waits on you. On Slack refreshes, Pilot reads each waiting thread for new replies at most every ten minutes, sharing the
 hourly Slack budget. A reply from anyone but you resumes the message's latest chat with the new replies, quoted
 as context, and moves the message back to In progress; without a chat to resume, the message reopens. Your own
 replies, including ones an agent posts as you, never end a wait. The same tool marks the message **Done** once

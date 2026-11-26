@@ -239,8 +239,6 @@ struct CommandPaletteCatalog {
         var entries = [
             CommandPaletteEntry(item: CommandPaletteItem(id: "page:home", kind: .page, title: "Home", suggested: true),
                                 icon: .home) { [model] in model.openHome() },
-            CommandPaletteEntry(item: CommandPaletteItem(id: "page:inbox", kind: .page, title: "Inbox", suggested: true),
-                                icon: .inbox) { [model] in model.showInbox() },
         ]
         entries.append(CommandPaletteEntry(
             item: CommandPaletteItem(id: "page:usage", kind: .page, title: "Usage", suggested: true),

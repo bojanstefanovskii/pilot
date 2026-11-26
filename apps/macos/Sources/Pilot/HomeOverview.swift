@@ -114,20 +114,20 @@ enum HomeStatus {
         }
     }
 
-    /// What the Inbox lists: Needs you, Ready to merge, Linear and Slack, across projects.
-    static func inboxCount(_ rows: [HomeProjectStatus]) -> Int {
+    /// What waits on the user: Needs you, Ready to merge, Linear and Slack, across projects.
+    static func waitingCount(_ rows: [HomeProjectStatus]) -> Int {
         rows.reduce(0) { $0 + $1.counts.needsYou + $1.readyToMerge + $1.counts.tracked }
     }
 
-    /// "3 working · 1 active mission · 7 in Inbox", in the dot style of the project rows. Zero counts are left out.
+    /// "3 working · 1 active mission · 7 waiting", in the dot style of the project rows. Zero counts are left out.
     static func summary(_ rows: [HomeProjectStatus]) -> String {
         let working = rows.reduce(0) { $0 + $1.counts.working }
         let missions = rows.reduce(0) { $0 + $1.missions.count }
-        let inbox = inboxCount(rows)
+        let waiting = waitingCount(rows)
         let parts = [
             working > 0 ? "\(working) working" : nil,
             missions > 0 ? "\(missions) active \(missions == 1 ? "mission" : "missions")" : nil,
-            inbox > 0 ? "\(inbox) in Inbox" : nil,
+            waiting > 0 ? "\(waiting) waiting" : nil,
         ].compactMap { $0 }
         return parts.isEmpty ? "All quiet" : parts.joined(separator: " · ")
     }

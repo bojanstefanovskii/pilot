@@ -66,3 +66,28 @@ import Testing
     app.showWorkflow(.features)
     #expect(app.workflowPage == .features && app.selectedSessionId == nil)
 }
+
+@Test @MainActor func chatTabsOpenAfterTheCurrentTabStayBoundedAndCloseToANeighbour() {
+    let tabs = ChatTabs(defaults: UserDefaults(suiteName: "chat-tabs-\(UUID())")!)
+    tabs.opened("a", after: nil)
+    tabs.opened("b", after: "a")
+    tabs.opened("c", after: "a")
+    #expect(tabs.ids == ["a", "c", "b"])
+    tabs.opened("a", after: "b")
+    #expect(tabs.ids == ["a", "c", "b"])
+    #expect(tabs.neighbour(of: "b", offset: 1) == "a")
+    #expect(tabs.neighbour(of: "a", offset: -1) == "b")
+    #expect(tabs.close("c") == "b")
+    #expect(tabs.close("b") == "a")
+    #expect(tabs.close("a") == nil)
+    for n in 0..<20 { tabs.opened("chat-\(n)", after: nil) }
+    #expect(tabs.ids.count == ChatTabs.limit && tabs.ids.last == "chat-19")
+}
+
+@Test func linearClosedTicketsMarkChatsDoneWithoutAnOpenPullRequest() {
+    let source = SessionTrackedSource(kind: .linear, itemId: "i", label: "ENG-1", title: "T", url: "https://linear.app/x", done: true)
+    var chat = SessionSummary(id: "c", title: "C", cwd: "/tmp", createdAt: 1, updatedAt: 7, state: "idle")
+    chat.trackedSource = source
+    #expect(chat.isDone && chat.isTicketDone && !chat.isMerged)
+    #expect(chat.doneAt == 7)
+}

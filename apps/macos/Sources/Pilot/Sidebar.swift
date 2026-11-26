@@ -17,7 +17,7 @@ struct SessionSidebar: View {
 
     @FocusState private var searchFocused: Bool
     @FocusState private var chatListFocused: Bool
-    /// Lines the Missions header's + up with the compose button and Inbox badge above it. The header stays full
+    /// Lines the Missions header's + up with the compose button above it. The header stays full
     /// width under the scroll bar, so without this inset the + sat beneath it and lost clicks.
     private static let missionsAddTrailingInset: CGFloat = 16
 
@@ -40,7 +40,7 @@ struct SessionSidebar: View {
             guard let key else { return }
             model.navigate(.session, id: key)
         })) {
-            // The sidebar is navigation: chats live in Inbox and the Missions, Features and Quick fixes pages.
+            // The sidebar is navigation: chats live in the Chats, Missions, Features and Quick fixes pages.
             // Search (⌘F) still lists matching chats here.
             if searching {
                 if model.localHost != nil { unifiedMissions }
@@ -84,18 +84,14 @@ struct SessionSidebar: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            // Home and the Inbox cover every project; the selector heads the scoped list below them. Archived
+            // Home covers every project; the selector heads the scoped list below it. Archived
             // chats live in the selector's menu, search behind ⌘F (which also finds archived chats).
-            let needsYou = SidebarScopeCounts.total(counts).needsYou
             let archivedCount = focused.map { project in
                 client.archivedSessions.filter { $0.projectId == project.id }.count
             } ?? client.archivedSessions.count
             VStack(spacing: 6) {
                 SidebarHeader(model: model, client: client, counts: counts, homeSelected: homeSelected,
-                              inboxSelected: inboxSelected, overviewSelected: overviewSelected(focused),
-                              needsYou: needsYou,
-                              needsYouHelp: SidebarScopeCounts.needsYouReasons(total: needsYou,
-                                                                               reasons: needsYouReasons, counts: counts),
+                              overviewSelected: overviewSelected(focused),
                               archivedCount: archivedCount, folderEditor: folderEditor)
                 if showsSearch {
                     SearchField(text: $model.sidebarQuery, focused: $searchFocused) { model.hideSidebarSearch() }
@@ -226,7 +222,7 @@ struct SessionSidebar: View {
     /// Home is selected when the detail shows it, in any scope.
     private var homeSelected: Bool {
         model.selectedSessionId == nil && model.selectedMissionId == nil && model.selectedProjectId == nil
-            && !model.showingArchive && !model.showingInbox && !model.showingUsage
+            && !model.showingArchive && !model.showingUsage
     }
 
     private func overviewSelected(_ focused: Project?) -> Bool {
@@ -234,18 +230,6 @@ struct SessionSidebar: View {
         return model.selectedSessionId == nil && model.selectedProjectId == focused.id
     }
 
-    /// Why every project's chats need the user, for the Inbox badge's tooltip. Like pilotd's counts, read results
-    /// no longer count (even while their chat is open) and pinned chats count by their state.
-    private var needsYouReasons: NeedsYouReasons {
-        let unread = { (session: SessionSummary) in model.isUnread(session) }
-        let groups = SidebarUrgency.groups(client.activeSessions, unread: unread, separatingPinned: false)
-        return NeedsYouReasons(groups.needsYou, unread: unread)
-    }
-
-    private var inboxSelected: Bool {
-        model.showingInbox && model.selectedSessionId == nil && model.selectedMissionId == nil
-            && model.selectedProjectId == nil
-    }
 
     /// Chats by urgency, pinned chats first in their own group. Mission chats are listed like any chat, their
     /// mission on the second line. With `projectNames` (All projects) each row names its project; a focused project

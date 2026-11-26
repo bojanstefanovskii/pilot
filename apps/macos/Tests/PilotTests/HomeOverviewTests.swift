@@ -58,7 +58,7 @@ private func project(_ id: String, _ name: String? = nil) -> Project {
     #expect(p.countsLine == "2 working · 1 needs you · 1 ready to merge")
     #expect(p.missionLine == "Release: 3 of 12 tasks")
     #expect(rows[1].signal == nil && rows[1].countsLine == "Quiet" && rows[1].missionLine == nil && !rows[1].isActive)
-    #expect(HomeStatus.inboxCount(rows) == 5)
+    #expect(HomeStatus.waitingCount(rows) == 5)
 }
 
 @Test func homeProjectsSortByUrgencyThenActivityThenName() {
@@ -80,11 +80,11 @@ private func project(_ id: String, _ name: String? = nil) -> Project {
         counts: ["a": ProjectDashboardCount(working: 2, needsYou: 1, tracked: 4),
                  "b": ProjectDashboardCount(working: 1)],
         sessions: [homeSession("r", project: "c", readyPR: true)], missions: [homeMission("m", project: "a")])
-    #expect(HomeStatus.summary(rows) == "3 working · 1 active mission · 6 in Inbox")
+    #expect(HomeStatus.summary(rows) == "3 working · 1 active mission · 6 waiting")
     let one = HomeStatus.projects([project("a")], counts: ["a": ProjectDashboardCount(working: 1)], sessions: [], missions: [])
     #expect(HomeStatus.summary(one) == "1 working")
     let waiting = HomeStatus.projects([project("a")], counts: ["a": ProjectDashboardCount(tracked: 1)], sessions: [], missions: [])
-    #expect(HomeStatus.summary(waiting) == "1 in Inbox")
+    #expect(HomeStatus.summary(waiting) == "1 waiting")
     #expect(HomeStatus.summary([]) == "All quiet")
 }
 

@@ -30,8 +30,7 @@ private func working(_ session: String) -> DashboardWorkingItem {
     let overview = ProjectOverview(dashboard)
     #expect(overview.upNext.map(\.id) == ["needs:a", "needs:b", "ready:https://github.com/o/r/pull/1"])
     #expect(overview.upNext.map(\.signal) == [.failed, .needsYou, .readyToMerge])
-    #expect(overview.inboxTotal == 4)
-    #expect(overview.inboxLinkTitle == "Open Inbox (4)")
+    #expect(overview.upNextTotal == 4)
     #expect(overview.pullRequests.map(\.number) == [3])
     #expect(overview.pullRequestTotal == 1)
 }
@@ -48,7 +47,7 @@ private func working(_ session: String) -> DashboardWorkingItem {
     let overview = ProjectOverview(dashboard)
     // s1 needs the user and s2 works; a failed schedule targeting s3 does not hold its pull request back.
     #expect(overview.upNext.map(\.id) == ["needs:q", "needs:x", "ready:https://github.com/o/r/pull/3"])
-    #expect(overview.inboxTotal == 3)
+    #expect(overview.upNextTotal == 3)
     #expect(overview.pullRequests.isEmpty && overview.pullRequestTotal == 0)
 }
 
@@ -62,10 +61,9 @@ private func working(_ session: String) -> DashboardWorkingItem {
     let overview = ProjectOverview(dashboard)
     #expect(overview.upNext.count == 3)
     #expect(overview.upNext.allSatisfy { if case .needsYou = $0 { true } else { false } })
-    #expect(overview.inboxTotal == 13)
+    #expect(overview.upNextTotal == 13)
     // Pending pull requests sit past the limit, behind five ready ones: still counted for "Show all".
     #expect(overview.pullRequests.isEmpty && overview.pullRequestTotal == 3)
-    #expect(ProjectOverview(ProjectDashboard(projectId: "p")).inboxLinkTitle == "Open Inbox")
 }
 
 @Test func missionAndRecentCornersFallBackToDashboardFigures() {

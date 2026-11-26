@@ -269,3 +269,22 @@ test("poll commits validate atomically, bound lists and preserve checkpoints on 
 		await store.close();
 	}
 });
+test("a chat's Linear source is done once its ticket is completed or canceled", async () => {
+	const store = new TrackedItemStore(":memory:");
+	try {
+		await store.load(["p"]);
+		await store.commit("p", "linear", [
+			{ ...trackedInput("open", 10), metadata: { identifier: "ENG-1", statusType: "started" } },
+			{ ...trackedInput("shipped", 20), metadata: { identifier: "ENG-2", statusType: "completed" } },
+			{ ...trackedInput("dropped", 30), metadata: { identifier: "ENG-3", statusType: "canceled" } },
+		]);
+		const items = (await store.list({ projectId: "p" })).items;
+		for (const [index, item] of items.entries()) await store.patch(item.id, { sessionId: `chat-${index}` });
+		const done = Object.fromEntries(
+			(await store.sessionSources("p")).map(({ source }) => [source.label, source.done === true]),
+		);
+		assert.deepEqual(done, { "ENG-1": false, "ENG-2": true, "ENG-3": true });
+	} finally {
+		await store.close();
+	}
+});

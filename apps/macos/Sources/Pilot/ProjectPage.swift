@@ -279,9 +279,7 @@ private struct ProjectDashboardBody: View {
                 .foregroundStyle(Theme.mutedForeground)
             }
 
-            ProjectPageSection(header: PageSectionHeader(title: "Up next", linkTitle: overview.inboxLinkTitle) {
-                model.showInbox(for: project.id, context: hostContext)
-            }) {
+            ProjectPageSection(header: PageSectionHeader(title: "Up next", count: overview.upNextTotal)) {
                 if overview.upNext.isEmpty {
                     HStack(spacing: 8) {
                         PilotSymbol(PilotIcon.complete).foregroundStyle(Theme.success).frame(width: 16)

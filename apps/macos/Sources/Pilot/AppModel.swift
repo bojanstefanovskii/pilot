@@ -46,6 +46,8 @@ final class AppModel: ObservableObject {
     let subagentFeeds = SubagentFeeds()
     let settings = AppSettings.shared
     let terminals = TerminalStore()
+    /// Open local chats as tabs above the conversation.
+    let chatTabs = ChatTabs()
     let notifier = Notifier()
     private var knownReadyPullRequests = Set<String>()
     var adoptedOperationIds: Set<String> = []
@@ -85,6 +87,9 @@ final class AppModel: ObservableObject {
             if let id = selectedSessionId, let ref = resourceRef(id, kind: .session) {
                 hosts.selection = ref
             } else if hosts.selection?.host == localHost { hosts.selection = nil }
+            if let id = selectedSessionId, oldValue != id, client.session(id) != nil {
+                chatTabs.opened(id, after: oldValue)
+            }
             // Leaving a chat lets the results read there regroup (Recent or Ready to merge).
             if oldValue != selectedSessionId, attention.leave(keeping: selectedSessionId) { reviewRevision += 1 }
             if oldValue != selectedSessionId {
@@ -173,8 +178,6 @@ final class AppModel: ObservableObject {
         didSet { projectFolders.save(defaults: projectFolderDefaults) }
     }
     @Published var showingArchive = false
-    /// The Inbox page: what waits on the user across every project. Below chats, missions and project pages.
-    @Published var showingInbox = false
     /// Local-only usage, independent of the focused project. Also true while a workflow page (Today, Sprint,
     /// Reviews, Routines) is shown, so every navigation that leaves Usage leaves those pages too.
     @Published var showingUsage = false { didSet { if !showingUsage, workflowPage != nil { workflowPage = nil } } }
@@ -188,12 +191,8 @@ final class AppModel: ObservableObject {
     var pendingWorkflowOrigin: WorkflowPage?
     /// Your open PRs that need you (changes requested, failing CI), by project, refreshed in the background.
     @Published var pullRequestsNeedingYou: [String: Int] = [:]
-    /// The Inbox's project filter (nil lists every project). Preset to the focused project each time the Inbox
-    /// opens, and never saved.
-    @Published var inboxProjectId: String?
     /// nil browses every project's archived chats.
     @Published var archiveHost: HostRef?
-    @Published var inboxHost: HostRef?
     @Published var archiveProjectId: String?
     /// nil includes chats from every mission, as well as chats without one.
     @Published var archiveMissionId: String?
@@ -562,7 +561,7 @@ final class AppModel: ObservableObject {
         beginNavigation()
         defer { endNavigation() }
         hosts.selection = nil
-        showingArchive = false; showingUsage = false; showingInbox = false
+        showingArchive = false; showingUsage = false
         selectedSessionId = nil; selectedMissionId = nil; selectedProjectId = nil
         return true
     }
@@ -750,7 +749,7 @@ final class AppModel: ObservableObject {
         else if projectId != nil { newSessionForm.executionHost = localHost }
         hosts.selection = nil
         showingArchive = false
-        showingUsage = false; showingInbox = false
+        showingUsage = false
         if projectId != nil || message != nil { newSessionForm.mission = nil }
         let fresh = message != nil || !newSessionForm.hasUnsubmittedDraft
         if let projectId, draftProjectId != projectId {
@@ -898,26 +897,10 @@ final class AppModel: ObservableObject {
         archiveProjectId = projectId
         chooseArchiveMission(missionId)
         showingArchive = true
-        showingUsage = false; showingInbox = false
-        selectedSessionId = nil
-        selectedMissionId = nil
-        selectedProjectId = nil
-    }
-
-    /// Shows the Inbox, its project filter preset to `projectId` (from a project's Overview), else to the focused
-    /// project (every project when none is focused).
-    func showInbox(for projectId: String? = nil, context: HostViewContext? = nil) {
-        beginNavigation()
-        defer { endNavigation() }
-        inboxHost = context?.host ?? focusedProjectRef?.host
-        hosts.selection = nil
-        showingArchive = false
-        selectedSessionId = nil
-        selectedMissionId = nil
-        selectedProjectId = nil
-        inboxProjectId = projectId ?? focusedProject?.id
         showingUsage = false
-        showingInbox = true
+        selectedSessionId = nil
+        selectedMissionId = nil
+        selectedProjectId = nil
     }
 
     /// Old navigation routes resolve to Home. Control is no longer a product destination.
@@ -938,7 +921,7 @@ final class AppModel: ObservableObject {
         }
         hosts.selection = nil
         showingArchive = false
-        showingUsage = false; showingInbox = false
+        showingUsage = false
         selectedSessionId = nil
         // Local pages select the plain project id, even when given a qualified key.
         selectedProjectId = ref?.localId ?? id
@@ -1094,14 +1077,13 @@ final class AppModel: ObservableObject {
         if let id = selectedMissionId { return .mission(id) }
         if let id = selectedProjectId { return .project(id) }
         if showingUsage { return .usage }
-        if showingInbox { return .inbox }
         if showingArchive { return .archive(projectId: archiveProjectId, missionId: archiveMissionId) }
         return .home
     }
 
     /// Lists every project (nil) or focuses the sidebar on one. Remembers the selection of the scope being
     /// left and restores the last selection of the new scope; a project seen for the first time opens its
-    /// Overview. Home and the Inbox stay open.
+    /// Overview. Home stays open.
     func focus(on projectId: String?) {
         beginNavigation()
         defer { endNavigation() }
@@ -1120,8 +1102,7 @@ final class AppModel: ObservableObject {
         sidebarScope = target
         saveSidebarScope()
         let saved = scopeSelections[SidebarSelection.scopeKey(target)]
-        apply(leaving == .inbox ? .inbox
-            : SidebarSelection.restoring(saved, in: target, sessions: client.sessions, missions: client.missions,
+        apply(SidebarSelection.restoring(saved, in: target, sessions: client.sessions, missions: client.missions,
                                          projectIds: Set(client.projects.map(\.id))))
     }
 
@@ -1164,7 +1145,7 @@ final class AppModel: ObservableObject {
         switch selection {
         case .home:
             showingArchive = false
-            showingUsage = false; showingInbox = false
+            showingUsage = false
             selectedSessionId = nil
             selectedMissionId = nil
             selectedProjectId = nil
@@ -1180,8 +1161,6 @@ final class AppModel: ObservableObject {
             showArchive(in: projectId, missionId: missionId)
         case .usage:
             showUsage()
-        case .inbox:
-            showInbox()
         }
     }
 
@@ -1499,9 +1478,6 @@ extension AppModel {
             else if slackTriageProjectId == id { location.projectPage = .slack(caseId: slackTriageCaseId) }
         case .archive:
             location.filterHost = archiveHost
-        case .inbox:
-            location.filterHost = inboxHost
-            location.inboxProjectId = inboxProjectId
         case .usage:
             location.workflowPage = workflowPage
         default: break
@@ -1530,13 +1506,12 @@ extension AppModel {
         saveSidebarScope()
         hosts.selection = nil
         showingArchive = false
-        showingUsage = false; showingInbox = false
+        showingUsage = false
         selectedSessionId = nil
         selectedMissionId = nil
         selectedProjectId = nil
         clearProjectSubpage()
         slackTriageAdd = nil
-        let context = location.filterHost.map { HostViewContext(host: $0, hosts: hosts) }
         switch location.selection {
         case .home: break // Return to the retained draft without resetting or submitting it.
         case let .session(id): selectedSessionId = id
@@ -1555,10 +1530,6 @@ extension AppModel {
             showingArchive = true
         case .usage:
             if let page = location.workflowPage { showWorkflowBoard(page) } else { showUsage() }
-        case .inbox:
-            showInbox(for: location.inboxProjectId, context: context)
-            inboxProjectId = location.inboxProjectId
-            inboxHost = location.filterHost
         }
         saveDrafts()
     }
@@ -1569,7 +1540,7 @@ extension AppModel {
         case let .session(id): return canRestoreSessionSelection(id) && navigationResourceExists(id, kind: .session)
         case let .mission(id): return navigationResourceExists(id, kind: .mission)
         case let .project(id): return navigationResourceExists(id, kind: .project)
-        case .home, .inbox, .usage, .archive: return true
+        case .home, .usage, .archive: return true
         }
     }
 

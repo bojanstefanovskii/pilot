@@ -75,7 +75,7 @@ extension AppModel {
     /// Whether a Go menu destination applies here. Unavailable ones never guess a project or mission.
     func canGo(to destination: GoDestination) -> Bool {
         switch destination {
-        case .home, .inbox, .usage, .archive, .slack, .linear: true
+        case .home, .usage, .archive, .slack, .linear: true
         case .overview: sidebarScope != nil
         case .mission, .tasks, .brief: currentMissionId != nil
         }
@@ -85,7 +85,6 @@ extension AppModel {
         guard canGo(to: destination) else { return }
         switch destination {
         case .home: openHome()
-        case .inbox: showInbox()
         case .usage: showUsage()
         case .overview: openOverview()
         case .archive: showArchive(in: focusedProject?.id)
@@ -139,7 +138,6 @@ extension GoDestination {
     var menuTitle: String {
         switch self {
         case .home: "Home"
-        case .inbox: "Inbox"
         case .usage: "Usage"
         case .overview: "Project Overview"
         case .mission: "Mission Overview"

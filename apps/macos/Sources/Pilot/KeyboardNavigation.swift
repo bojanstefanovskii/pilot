@@ -543,7 +543,6 @@ struct KeyboardRegionAnchor: NSViewRepresentable {
 /// A Go menu and palette destination. Navigation only: a destination that is not available does nothing.
 enum GoDestination: String, CaseIterable {
     case home
-    case inbox
     case usage
     case overview
     case mission

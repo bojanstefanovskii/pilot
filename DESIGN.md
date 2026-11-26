@@ -45,13 +45,13 @@ Calm is not plain. The app should look sleek and feel pleasant to the eye, like 
   They explain a change, never decorate it.
 - **Calm, Linear-like surfaces.** No illustrations, dithering, glows or blurs: a white page, a slightly darker
   sidebar, hairlines between rows and one indigo `brand` accent. Pages open on their content (Home on the composer,
-  an empty Inbox on one sentence). Rows show state with still marks and words (see State vocabulary).
+  an empty board on one sentence). Rows show state with still marks and words (see State vocabulary).
 - **Check it by eye.** Beauty is reviewed, not assumed. Look at the real result with real
   and long content, before calling a UI change done.
 
 ## Attention budget
 
-Only things that need the user may interrupt: notifications, the Inbox and menu bar badges, and colored status.
+Only things that need the user may interrupt: notifications, the menu bar badge, and colored status.
 Failed chats, unreviewed results, agent and mission questions, failed scheduled items, a stopping subscription
 limit, a pull request Pilot could not get unstuck, an MCP server that needs sign-in and a background job running for
 over an hour qualify. Working, finished and merged things do not, they wait on the page. When lists mix states, sort
@@ -59,7 +59,7 @@ by urgency: failed, question, scheduled failure, unread, then the rest.
 
 - **Every Needs you item says why.** One short reason (`NeedsYouReason`: "Failed: …", "Asks: …", "Long job: …",
   "Limit reached · resumes 18:00", "Not reviewed: finished 5m ago") appears in the row's metadata line, its tooltip
-  and VoiceOver label, and the Inbox badge's tooltip sums the reasons. Use these words everywhere; do not invent a
+  and VoiceOver label, and badge tooltips sum the reasons. Use these words everywhere; do not invent a
   screen-specific phrasing.
 - **Needs you clears itself.** There is no "mark as reviewed" or "remove" action. A read result leaves once the user
   leaves its chat (never while it is open, so nothing jumps), failures stay until retried and questions until
@@ -78,12 +78,9 @@ Each top-level view has one role. Keep new content in the view whose role it ser
 - **Home watches.** It always covers every project and answers "how is everything doing": a short count line,
   quiet subscription bars, projects under their folder headings, Working now, Missions and Activity. It has no badge;
   its only actions are starting a chat and adding a project.
-- **The Inbox acts.** It is the one place to act across projects: Needs you, Ready to merge, Linear and Slack, most
-  urgent first, and it carries the attention badge. A toolbar menu filters it to one project, preset to the focused
-  project when opened from it and never remembered.
 - **Overview orients.** A project's or mission's Overview leads with what is next for it, then what is in progress
   (see Overview pages).
-- **Lists stay light.** Sidebar rows, the Inbox, Overviews and Home show the PR badge, branch and reason, never file
+- **Lists stay light.** Sidebar rows, Overviews and Home show the PR badge, branch and reason, never file
   or line diff counts. Changes live in the chat's Changes pane and the row tooltip.
 - Name sources (Linear, Slack, GitHub), never an umbrella word for "items Pilot follows".
 - A chat started from or linked to a Slack message or Linear ticket in triage shows that service's mark after its
@@ -117,7 +114,7 @@ to right, like a typing indicator, fainter and half speed while only background 
 Chat motion plays on Core Animation (`LoopingLayerView`), never as per-frame SwiftUI updates, and changes only
 opacity, colour or a transform inside a fixed frame, so it never moves the layout.
 
-Pilot Next draws no row dither. A sidebar or Inbox row shows its state in words beside it or on its caption, plus
+Pilot Next draws no row dither. A sidebar or Overview row shows its state in words beside it or on its caption, plus
 one still mark in its trailing column: a neutral circle for Working (fainter when only background jobs run), an
 amber dot for Needs you and questions, a red triangle for Failed and a green pull-request glyph for Ready to merge.
 The circle is also the "replied since you looked" mark: hollow once you have seen the latest reply, filled when the
@@ -139,14 +136,14 @@ usage alone never establishes this state.
 
 ## Sidebar
 
-The sidebar answers "what needs me" before "where is it". From the top: Home (with compose), the Inbox (with the
-attention badge), then the project selector ("All projects" or one project) heading the scoped list, and a focused
+The sidebar answers "what needs me" before "where is it". From the top: Home (with compose), the workflow pages,
+then the project selector ("All projects" or one project) heading the scoped list, and a focused
 project's Overview as its first row. Archived chats, search (⌘F) and project folders (New Folder…, Move to folder)
 live in the selector's menu; folders are headings there and on Home, never a sidebar scope.
 
 Control is retired. There is no fixed Control row, Go menu destination, palette page or live composer.
 Existing conversations are archived on their source host and open as bounded read-only history, never as
-a new agent. No Project coordinator replaces Control. Home and the Inbox retain their existing roles.
+a new agent. No Project coordinator replaces Control. Home retains its existing role.
 
 Both scopes use the same order: Missions, then chats grouped only by urgency (Pinned, Needs you, Ready to
 merge, Working, Recent). All projects names each row's project; a focused project leaves it out. Missions never sit in
@@ -160,11 +157,11 @@ While searching (⌘F), matching archived chats follow in their own Archived gro
 A row's metadata line is a `RowLine`: whole segments in a fixed order (project, Ask or Coordinator, reason, PRs,
 mission, branch) with a dot only between shown segments. When they do not fit, the line fades out before the
 corner instead of truncating each segment or widening the row; the tooltip and VoiceOver keep every segment.
-Home, Inbox and Overview rows use the same line and may wrap it once.
+Home and Overview rows use the same line and may wrap it once.
 An unsent composer draft replaces the segments after the project with a pencil and the draft's first line, in
 muted text. It is the user's own work, so it never colours, badges or regroups the row.
 
-The sidebar opens with the workflow: Home, Inbox, Today, Sprint, Reviews, Routines and Usage, then the project
+The sidebar opens with the workflow: Home, Today, Sprint, Reviews, Routines and Usage, then the project
 selector and its chats. Today, Sprint, Reviews and Routines open in their own windows, so they can stay beside the
 chat being worked on; each has one primary action per row (Start, Test this PR) and reloads when the app is focused.
 
@@ -207,7 +204,7 @@ Pilot Next keeps the sidebar's job, finding your chat, but not Swift's urgency g
 sections whenever an agent changes state are hard to find again. The Swift sidebar above is unchanged.
 
 - **Sections:** Drafts, Pinned, Chats and, with the Archived filter, Archived (newest archive first). There are no
-  Needs you, Ready to merge or Working groups and no Needs you strip: the Inbox and its badge own attention.
+  Needs you, Ready to merge or Working groups and no Needs you strip: Overviews and the workflow boards own attention.
 - **Your order, not the agents'.** Chats are ordered by your own activity. A chat's place comes from its last user
   message (else its creation) when the app first sees it; afterwards it moves only when you send to it from this
   app. Agent work, results, automatic notices and state changes never move a row. This order is kept on this
@@ -222,7 +219,7 @@ sections whenever an agent changes state are hard to find again. The Swift sideb
   expands it, and opening a member expands its thread. A thread whose coordinator chat is not listed keeps a
   parent that opens the mission.
 - **Missions are not sidebar rows.** The sidebar lists chats; missions live in the Missions view, reached by its
-  one sidebar entry. Search results, Pinned, Archived, the Inbox and ⌘K list chats flat with their mission caption.
+  one sidebar entry. Search results, Pinned, Archived and ⌘K list chats flat with their mission caption.
 
 ## Consistency
 
@@ -306,13 +303,13 @@ button shows ⌘↩.
 
 A project's Overview is a single reading column with a one-sentence summary, then sections in order of urgency (Up
 next, Working now, Pull requests, Missions, Scheduled, Current cycle, Slack, Memory, Recent), at most five rows each.
-Up next leads with the project's top Inbox rows (Needs you, then Ready to merge) and links to the Inbox filtered to
-the project; Pull requests then lists only those still waiting on checks, review or a fix, so each chat appears once.
+Up next leads with what waits on the user in the project (Needs you, then Ready to merge), counted in its header;
+Pull requests then lists only those still waiting on checks, review or a fix, so each chat appears once.
 A mission's Overview has the same shape: its goal, one meta line, the task progress bar with its
 legend, then Needs you (hidden when empty), Working now, Linear tickets (hidden when the mission manages none) and
 Links. Its title row carries a Compass icon action that opens the mission's own coordinator chat, the chat people
 open most from a mission; it is disabled when that chat can't be opened here and absent when no coordinator is
-assigned. Both share the Inbox's rows and words (Needs you rows, Ready to merge). Sections added later follow the same
+assigned. Both share the same rows and words (Needs you rows, Ready to merge). Sections added later follow the same
 rules. A managed ticket nests its contributing tasks one level deep, like sub-issues, and says only in words which
 links count toward it ("Counts toward ENG-123") and which are references ("Referenced by #7 · not counted"); Links
 holds every other link, so a ticket appears once. Its Linear update line is muted while up to date, amber with

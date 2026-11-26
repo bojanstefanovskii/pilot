@@ -538,6 +538,8 @@ export interface SessionTrackedSource {
 	/** Message or ticket title, at most 200 characters. */
 	title: string;
 	url: string;
+	/** Linear only: the ticket is completed, canceled or a duplicate. Such chats are archived automatically. */
+	done?: boolean;
 }
 
 /** One conversation of a session. The session shows and continues exactly one, its active attempt. */

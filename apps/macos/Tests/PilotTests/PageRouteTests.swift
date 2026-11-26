@@ -30,7 +30,7 @@ private func fixture() -> AppModel {
     model.newSessionForm.message = "new chat draft"
     model.composer(for: "a").draft = "reply draft"
     model.selectedSessionId = "a"
-    model.showInbox()
+    model.showUsage()
     #expect(model.navigationHistory.canGoBack)
     model.goBack()
     #expect(model.currentRoute == .session("a"))

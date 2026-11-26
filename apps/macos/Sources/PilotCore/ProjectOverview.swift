@@ -2,17 +2,17 @@ import Foundation
 
 /// What a project's Overview lists from its dashboard, kept apart from views so it can be tested.
 ///
-/// Up next leads the page: the project's top Inbox rows, Needs you first, then pull requests ready to merge, with
-/// the Inbox's own count behind "Open Inbox (N)". A ready pull request is listed only while its chat neither works
-/// nor needs the user, as pilotd's Inbox and the sidebar's Ready to merge group do, so each chat appears once.
+/// Up next leads the page: what waits on the user in the project, Needs you first, then pull requests ready to merge,
+/// with the full count in its header. A ready pull request is listed only while its chat neither works nor needs the
+/// user, as the sidebar's Ready to merge group does, so each chat appears once.
 /// Pull requests then lists only the open ones still waiting on checks, review or a fix.
 public struct ProjectOverview: Equatable, Sendable {
-    /// Rows Up next shows before "Open Inbox".
+    /// Rows Up next shows; its header counts every one.
     public static let upNextLimit = 3
 
     public let upNext: [ProjectOverviewRow]
-    /// The project's Needs you and Ready to merge rows, as the Inbox filtered to the project lists them.
-    public let inboxTotal: Int
+    /// The project's Needs you and Ready to merge rows, including those past `upNextLimit`.
+    public let upNextTotal: Int
     /// Open and draft pull requests that are not ready to merge, in dashboard order.
     public let pullRequests: [DashboardPullRequest]
     /// Every such pull request, including those past the dashboard's section limit.
@@ -30,15 +30,10 @@ public struct ProjectOverview: Equatable, Sendable {
         let readyTotal = max(listed.count, dashboard.summary.readyPullRequests - (ready.count - listed.count))
         upNext = Array((dashboard.needsYou.items.map(ProjectOverviewRow.needsYou)
             + listed.map(ProjectOverviewRow.readyToMerge)).prefix(max(0, upNextLimit)))
-        inboxTotal = dashboard.needsYou.total + readyTotal
+        upNextTotal = dashboard.needsYou.total + readyTotal
         pullRequests = dashboard.pullRequests.items.filter { !$0.isReady }
         pullRequestTotal = max(pullRequests.count,
                                dashboard.summary.openPullRequests - dashboard.summary.readyPullRequests)
-    }
-
-    /// "Open Inbox (5)", or "Open Inbox" when nothing waits.
-    public var inboxLinkTitle: String {
-        inboxTotal > 0 ? "Open Inbox (\(inboxTotal))" : "Open Inbox"
     }
 }
 
@@ -54,7 +49,7 @@ public enum ProjectOverviewRow: Identifiable, Equatable, Sendable {
         }
     }
 
-    /// The row's dithered corner, as in the Inbox.
+    /// The row's status corner.
     public var signal: SessionSignal {
         switch self {
         case let .needsYou(item): item.signal

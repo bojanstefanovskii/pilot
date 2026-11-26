@@ -18,8 +18,11 @@ struct MainWindow: View {
         switch daemon.status {
         case .running:
             if let session = model.selectedSession {
-                SessionDetail(session: session)
-                    .id(session.id)
+                VStack(spacing: 0) {
+                    ChatTabStrip(model: model, tabs: model.chatTabs, client: model.client)
+                    SessionDetail(session: session)
+                        .id(session.id)
+                }
             } else if let missionId = model.selectedMissionId {
                 MissionPage(missionId: missionId)
                     .id(missionId)
@@ -34,8 +37,6 @@ struct MainWindow: View {
                     ProjectPage(projectId: projectId)
                         .id(projectId)
                 }
-            } else if model.showingInbox {
-                InboxPage().environment(\.hostViewContext, model.inboxHost.map { HostViewContext(host: $0, hosts: hosts) } ?? model.localHost.map { HostViewContext(host: $0, hosts: hosts) })
             } else if model.showingArchive {
                 ArchiveView().environment(\.hostViewContext, model.archiveHost.map { HostViewContext(host: $0, hosts: hosts) } ?? model.localHost.map { HostViewContext(host: $0, hosts: hosts) })
             } else {

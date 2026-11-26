@@ -1170,7 +1170,8 @@ function sameTrackedSource(a?: SessionTrackedSource, b?: SessionTrackedSource): 
 			a.itemId === b.itemId &&
 			a.label === b.label &&
 			a.title === b.title &&
-			a.url === b.url)
+			a.url === b.url &&
+			a.done === b.done)
 	);
 }
 
@@ -1257,6 +1258,7 @@ export class SessionManager {
 					if (next) this.trackedSources.set(meta.id, next);
 					else this.trackedSources.delete(meta.id);
 					this.emit(meta);
+					if (next?.done && !previous?.done) await this.archiveDoneTicket(meta);
 				}
 				for (const id of this.trackedSources.keys()) if (!this.metas.has(id)) this.trackedSources.delete(id);
 			} while (state.again);
@@ -9547,6 +9549,29 @@ export class SessionManager {
 	}
 
 	/** A known merge is terminal. Its persisted timestamp is enough for a local archive deadline. */
+	/**
+	 * A chat whose Linear ticket was closed is finished: archive it, so its worktree is reclaimed after retention.
+	 * Pinned, working, mission and Ask chats, and chats with an open PR, stay as they are.
+	 */
+	private async archiveDoneTicket(meta: SessionMeta): Promise<void> {
+		if (
+			meta.pinned ||
+			meta.archivedAt !== undefined ||
+			meta.mode === "ask" ||
+			this.missions?.membership(meta.id) ||
+			hasActivePullRequest(meta) ||
+			this.closing ||
+			this.summary(meta).state === "working"
+		)
+			return;
+		try {
+			await this.setArchived(meta.id, true);
+		} catch (error) {
+			if (!(error instanceof Conflict))
+				console.warn(`pilotd: could not archive ${meta.id} after its ticket closed: ${error}`);
+		}
+	}
+
 	private async archiveMergedPullRequest(meta: SessionMeta): Promise<void> {
 		const target = this.mergeArchiveTarget(meta);
 		if (

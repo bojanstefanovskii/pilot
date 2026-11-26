@@ -511,7 +511,7 @@ private struct SlackLabelRow: View {
                 .foregroundStyle(Theme.mutedForeground)
                 .fixedSize()
                 .accessibilityLabel("Label effect, \(label.effect.settingsTitle)")
-                .help("Hide keeps messages out of the Inbox. Close dismisses them unless you set a status. Both stay in Slack triage behind Show hidden.")
+                .help("Hide keeps messages out of the default lists. Close dismisses them unless you set a status. Both stay in Slack triage behind Show hidden.")
                 Button(action: remove) { PilotSymbol(PilotIcon.remove) }
                     .rowIconButtonStyle(hoverTint: Theme.destructive)
                     .help("Remove this label")
@@ -531,7 +531,7 @@ extension SlackLabelEffect {
     var settingsTitle: String {
         switch self {
         case .none: "None"
-        case .hide: "Hide from Inbox"
+        case .hide: "Hide"
         case .close: "Close"
         }
     }

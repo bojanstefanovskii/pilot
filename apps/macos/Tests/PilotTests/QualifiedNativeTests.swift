@@ -83,9 +83,6 @@ import Testing
     #expect(app.memoryProjectId == ref.storageKey)
     #expect(app.hosts.selection == ref)
     #expect(app.hosts.presentationClient(remote) !== app.client)
-    app.showInbox(for: "same", context: context)
-    #expect(app.inboxHost == remote)
-    #expect(app.inboxProjectId == "same")
     app.focus(on: nil)
 }
 

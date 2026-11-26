@@ -345,9 +345,9 @@ private func usageDashboardReplacing<T: Codable>(_ value: T, _ change: (inout [S
         let hosts = ClientDirectory(operationDirectory: directory.appendingPathComponent("operations"))
         let app = AppModel(projectFolderDefaults: defaults, hosts: hosts)
         // Opening the page needs neither provider setup, a connected Local endpoint nor an environment opt-in.
-        app.showingInbox = true; app.showingArchive = true
+        app.showingArchive = true
         app.showUsage()
-        #expect(app.showingUsage && !app.showingInbox && !app.showingArchive)
+        #expect(app.showingUsage && !app.showingArchive)
         #expect(app.currentRoute == .usage)
         #expect(app.selectedSessionId == nil && app.selectedProjectId == nil && app.selectedMissionId == nil)
         await hosts.disconnectAll()

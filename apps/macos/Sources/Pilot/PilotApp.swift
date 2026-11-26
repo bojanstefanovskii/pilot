@@ -64,6 +64,7 @@ struct PilotApp: App {
             }
             SidebarScopeCommands(model: model, client: model.client)
             KeyboardNavigationCommands(model: model)
+            ChatTabCommands(model: model)
             KeyboardShortcutsCommands(model: model)
         }
 

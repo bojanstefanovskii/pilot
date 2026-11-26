@@ -49,9 +49,8 @@ struct NavigationLocation: Equatable {
     var scope: String?
     var selection: SidebarSelection = .home
     var projectPage: ProjectPage = .overview
-    /// Inbox and archive have an independent host and filter, not the current chat's host.
+    /// The archive has an independent host and filter, not the current chat's host.
     var filterHost: HostRef?
-    var inboxProjectId: String?
     /// The workflow page (Today, Sprint…) shown in place of Usage, so Back returns to it.
     var workflowPage: WorkflowPage?
 }

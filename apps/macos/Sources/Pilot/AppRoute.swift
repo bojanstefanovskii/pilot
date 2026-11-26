@@ -5,7 +5,6 @@ import PilotCore
 enum AppRoute: Hashable {
     case home
     case usage
-    case inbox(projectId: String?)
     case archive(projectId: String?, missionId: String?)
     case project(String)
     case slackTriage(String)
@@ -18,7 +17,6 @@ enum AppRoute: Hashable {
         switch self {
         case .home: "home"
         case .usage: "usage"
-        case let .inbox(projectId): "inbox:\(projectId ?? "")"
         case let .archive(projectId, missionId): "archive:\(projectId ?? ""):\(missionId ?? "")"
         case let .project(id): "project:\(id)"
         case let .slackTriage(id): "slack:\(id)"
@@ -41,7 +39,6 @@ extension AppModel {
             return .project(id)
         }
         if showingUsage { return .usage }
-        if showingInbox { return .inbox(projectId: inboxProjectId) }
         if showingArchive { return .archive(projectId: archiveProjectId, missionId: archiveMissionId) }
         return .home
     }

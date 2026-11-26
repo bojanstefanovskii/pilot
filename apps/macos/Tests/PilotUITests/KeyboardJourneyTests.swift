@@ -128,15 +128,15 @@ func keyboardOnlyStartSwitchTypeAndReturn() throws {
         #expect(journey.wait { model.newSessionForm.message == "g" })
 
         // Escape leaves the composer for the page with the draft kept. Letters on the page never navigate: G then I
-        // stays where it is. The Go menu's Inbox does open it.
+        // stays where it is. The Go menu's Usage does open it.
         journey.press("\u{1b}", keyCode: 53)
         #expect(journey.wait { !(journey.responder is SubmitTextView) })
         journey.press("g", keyCode: 5)
         journey.press("i", keyCode: 34)
         journey.settle(0.3)
-        #expect(!model.showingInbox && model.currentRoute == .home)
-        model.go(to: .inbox)
-        #expect(journey.wait { model.showingInbox })
+        #expect(!model.showingUsage && model.currentRoute == .home)
+        model.go(to: .usage)
+        #expect(journey.wait { model.showingUsage })
         #expect(model.newSessionForm.message == "g", "navigating never sends or clears the draft")
 
         // Back (⌘[ or ⌘←) returns Home; the draft is still there.

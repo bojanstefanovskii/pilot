@@ -148,16 +148,24 @@ extension SessionSummary {
         return pullRequest.map { [$0] } ?? []
     }
 
-    /// Done the GitHub way: every PR of the chat has settled and at least one merged. The latest merge time, or the
-    /// archive time when GitHub reported none. Nil while work is open or every PR was closed unmerged.
+    /// Done when GitHub merged its PRs (every PR settled, at least one merged), or when its Linear ticket closed
+    /// and no PR is still open. The latest merge time, else the archive or last update time.
     public var doneAt: Double? {
-        guard hasTerminalPullRequest else { return nil }
-        let merged = linkedPullRequests.filter { $0.state == .merged }
-        guard !merged.isEmpty else { return nil }
-        return merged.compactMap(\.mergedAt).max() ?? archivedAt ?? updatedAt
+        if hasTerminalPullRequest {
+            let merged = linkedPullRequests.filter { $0.state == .merged }
+            if !merged.isEmpty { return merged.compactMap(\.mergedAt).max() ?? archivedAt ?? updatedAt }
+        }
+        if isTicketDone, !isWorking, linkedPullRequests.allSatisfy(\.isTerminal) { return archivedAt ?? updatedAt }
+        return nil
     }
 
     public var isDone: Bool { doneAt != nil }
+
+    /// The chat's Linear ticket is completed, canceled or a duplicate.
+    public var isTicketDone: Bool { trackedSource?.kind == .linear && trackedSource?.done == true }
+
+    /// Merged on GitHub, as opposed to done because the ticket closed.
+    public var isMerged: Bool { linkedPullRequests.contains { $0.state == .merged } }
 
     /// The PR ⌘⇧P opens: the newest open one, else the newest of any state. GitHub numbers grow with each new PR,
     /// so the highest number is the latest. PRs whose URL is unsafe to open are skipped.

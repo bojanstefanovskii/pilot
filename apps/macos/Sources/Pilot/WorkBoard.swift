@@ -10,6 +10,10 @@ struct WorkBoardView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
     @ObservedObject private var pageStates = PageStateStore.shared
+    /// Done chats the user deleted from the board, newline-separated. Their history stays in the Archive.
+    @AppStorage("workBoard.deletedChats") private var deletedChats = ""
+    @State private var deleting: SessionSummary?
+    @State private var deleteError: String?
     /// How long finished work stays on the board.
     static let doneWindow: Double = 30 * 24 * 3600 * 1000
 
@@ -42,10 +46,30 @@ struct WorkBoardView: View {
         kindChats.filter { !$0.isArchived && !$0.isDone }.sorted { $0.updatedAt > $1.updatedAt }
     }
 
-    /// Chats whose PRs merged on GitHub. Merged chats are archived automatically, so they come from the archive too.
+    /// Chats whose PRs merged on GitHub or whose Linear ticket closed. Both archive the chat automatically, so they
+    /// come from the archive too.
     private var doneChats: [SessionSummary] {
-        kindChats.compactMap { session in session.doneAt.flatMap { $0 >= since ? (session, $0) : nil } }
-            .sorted { $0.1 > $1.1 }.map(\.0)
+        let deleted = Set(deletedChats.split(separator: "\n").map(String.init))
+        let since = since
+        let done: [(session: SessionSummary, at: Double)] = kindChats.compactMap { session in
+            guard !deleted.contains(session.id), let at = session.doneAt, at >= since else { return nil }
+            return (session, at)
+        }
+        return done.sorted { $0.at > $1.at }.map(\.session)
+    }
+
+    /// Archives the chat if needed, removes its worktree now and takes it off the board. The conversation stays
+    /// readable in the Archive.
+    private func delete(_ session: SessionSummary) async {
+        do {
+            if !session.isArchived { _ = try await client.archive(session.id) }
+            // Clone workspaces cannot be reclaimed; they are pruned on their own. Leaving the board still applies.
+            try? await client.reclaimWorkspace(session.id)
+            let ids = (deletedChats.split(separator: "\n").map(String.init) + [session.id]).suffix(500)
+            deletedChats = ids.joined(separator: "\n")
+        } catch {
+            deleteError = error.localizedDescription
+        }
     }
 
     private var missions: [Mission] {
@@ -91,6 +115,19 @@ struct WorkBoardView: View {
             .padding(24)
         }
         .background(Theme.background)
+        .confirmationDialog("Delete \"\(deleting?.trackedSource?.title ?? deleting?.title ?? "")\"?",
+                            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let session = deleting { Task { await delete(session) } }
+                deleting = nil
+            }
+        } message: {
+            Text("Its worktree is removed now and it leaves this board. The conversation stays in the Archive.")
+        }
+        .alert("Couldn't delete", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(deleteError ?? "") }
     }
 
     private func grid(done: Bool) -> some View {
@@ -103,6 +140,11 @@ struct WorkBoardView: View {
                 ForEach(done ? doneChats : chats) { session in
                     ChatCard(session: session, signal: done ? nil : session.signal(unread: model.isUnread(session)),
                              done: done) { model.open(session: session.id) }
+                        .contextMenu {
+                            if done {
+                                Button("Delete…", role: .destructive) { deleting = session }
+                            }
+                        }
                 }
             }
         }
@@ -179,7 +221,7 @@ private struct ChatCard: View {
     }
 
     private var stateText: String {
-        if done { return "Merged" }
+        if done { return session.isMerged ? "Merged" : "Done in Linear" }
         return switch signal {
         case .working?: "Working"
         case .needsYou?: "Needs you"

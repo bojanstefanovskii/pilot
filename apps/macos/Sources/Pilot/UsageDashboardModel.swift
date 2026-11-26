@@ -8,7 +8,7 @@ extension AppModel {
         beginNavigation()
         defer { endNavigation() }
         hosts.selection = nil
-        showingArchive = false; showingInbox = false
+        showingArchive = false
         selectedSessionId = nil; selectedMissionId = nil; selectedProjectId = nil
         clearProjectSubpage()
         workflowPage = nil

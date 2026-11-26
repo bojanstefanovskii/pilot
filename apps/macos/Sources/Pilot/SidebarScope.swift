@@ -12,8 +12,6 @@ enum SidebarSelection: Equatable {
     /// A project's Overview.
     case project(String)
     case archive(projectId: String?, missionId: String?)
-    /// The Inbox, its project filter preset from the sidebar's scope.
-    case inbox
     /// Observed Local usage across projects.
     case usage
 
@@ -27,7 +25,7 @@ enum SidebarSelection: Equatable {
         let fallback: SidebarSelection = scope.map { .project($0) } ?? .home
         guard let saved else { return fallback }
         switch saved {
-        case .home, .inbox, .usage:
+        case .home, .usage:
             return saved
         case let .session(id):
             guard let session = sessions.first(where: { $0.id == id }),
@@ -51,7 +49,7 @@ enum SidebarSelection: Equatable {
     }
 }
 
-/// Working and needs-you figures for the project selector and the Inbox badge.
+/// Working and needs-you figures for the project selector.
 enum SidebarScopeCounts {
     /// Every project's counts added up, optionally leaving one project out.
     static func total(_ counts: [String: ProjectDashboardCount], excluding projectId: String? = nil)
@@ -74,7 +72,7 @@ enum SidebarScopeCounts {
 
     static func needsYou(_ count: Int) -> String { "\(count) \(count == 1 ? "needs" : "need") you" }
 
-    /// The Inbox badge's tooltip and VoiceOver label: "5 need you: 2 questions, 1 failed, 2 not reviewed".
+    /// A needs-you tooltip or VoiceOver label: "5 need you: 2 questions, 1 failed, 2 not reviewed".
     /// Prefer the daemon's uncapped reasons (including scheduled failures and task/questions). Older daemons
     /// fall back to local chat reasons only when they account for the whole count. nil when nothing needs the user.
     static func needsYouReasons(total: Int, reasons: NeedsYouReasons,
@@ -145,7 +143,7 @@ struct NeedsYouReasons: Equatable {
 
 // MARK: - Views
 
-/// The top of the sidebar: Home (with compose) and the Inbox, which always cover every project, then the project
+/// The top of the sidebar: Home (with compose), which always covers every project, then the project
 /// selector ("All projects" or one focused project) heading everything scoped to it, and the focused project's
 /// Overview as its first row. Archived chats, search and project folders live in the selector's menu.
 struct SidebarHeader: View {
@@ -153,12 +151,7 @@ struct SidebarHeader: View {
     @ObservedObject var client: PilotClient
     let counts: [String: ProjectDashboardCount]
     let homeSelected: Bool
-    let inboxSelected: Bool
     let overviewSelected: Bool
-    /// What needs the user across every project, badged on the Inbox.
-    let needsYou: Int
-    /// The badge's tooltip and VoiceOver detail, summing the reasons when known.
-    let needsYouHelp: String?
     let archivedCount: Int
     /// The sidebar's folder sheet, opened from the selector's menu.
     let folderEditor: ProjectFolderEditorState
@@ -170,17 +163,6 @@ struct SidebarHeader: View {
                           action: { model.openHome() }) {
                 composeButton(project: project)
             }
-            SidebarNavRow(title: "Inbox", icon: PilotIcon.inbox, selected: inboxSelected,
-                          help: needsYouHelp ?? "Nothing needs you",
-                          accessibilityDetail: needsYouHelp, action: { model.showInbox() }) {
-                if needsYou > 0 {
-                    CountBadge(count: needsYou, style: .attention)
-                        .help(needsYouHelp ?? SidebarScopeCounts.needsYou(needsYou))
-                        .padding(.trailing, 6)
-                        .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .animation(Theme.Motion.quick, value: needsYou > 0)
             SidebarSectionLabel("Work")
             SidebarNavRow(title: "Today", icon: PilotIcon.todo, selected: model.isWorkflowTabSelected(.today),
                           help: "Your day, planned by the Today routines", height: Self.tabHeight,
@@ -319,7 +301,7 @@ struct SidebarSectionLabel: View {
     }
 }
 
-/// One navigation row at the top of the sidebar (Home, Inbox, Overview): a symbol, a title and an optional trailing
+/// One navigation row at the top of the sidebar (Home, workflow pages, Overview): a symbol, a title and an optional trailing
 /// accessory such as a badge or button. Hover and selection use the sidebar's selection fill.
 struct SidebarNavRow<Accessory: View>: View {
     let title: String

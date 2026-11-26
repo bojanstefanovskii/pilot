@@ -88,7 +88,7 @@ enum SlackTriageText {
         /// A configured channel ID.
         var channel: String?
         var query = ""
-        /// Messages whose label is set to Hide from Inbox, and the ones a Close label dismissed.
+        /// Messages whose label is set to Hide, and the ones a Close label dismissed.
         var showHidden = false
 
         var isNarrowed: Bool {
@@ -1199,7 +1199,7 @@ struct SlackTriageFilterBar: View {
             if hiddenCount > 0 || filter.showHidden {
                 Toggle("Show hidden (\(hiddenCount))", isOn: $filter.showHidden)
                     .toggleStyle(.checkbox)
-                    .help("Messages with a label marked Hide from Inbox")
+                    .help("Messages with a label marked Hide")
             }
             Toggle("Show dismissed", isOn: $showDismissed).toggleStyle(.checkbox)
             Spacer(minLength: 8)
@@ -1495,7 +1495,7 @@ struct SlackTypeLabel: View {
     }
 }
 
-/// A project label as a hairline tag. Labels hidden from the Inbox use a dashed outline and fainter text.
+/// A project label as a hairline tag. Hide labels use a dashed outline and fainter text.
 struct SlackLabelTag: View {
     let name: String?
     var hidden = false
@@ -1511,7 +1511,7 @@ struct SlackLabelTag: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small)
                     .strokeBorder(hidden ? Theme.faintForeground : Theme.border,
                                   style: StrokeStyle(lineWidth: 1, dash: hidden ? [3, 2] : [])))
-                .help(hidden ? "\(name), hidden from the Inbox" : name)
+                .help(hidden ? "\(name), hidden" : name)
         } else {
             Text("–").font(.pilot(.caption)).foregroundStyle(Theme.faintForeground).accessibilityLabel("No label")
         }

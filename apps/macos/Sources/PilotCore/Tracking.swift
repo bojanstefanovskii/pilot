@@ -13,9 +13,11 @@ public struct SessionTrackedSource: Codable, Equatable, Hashable, Sendable {
     /// Message or ticket title, at most 200 characters.
     public let title: String
     public let url: String
+    /// Linear only: the ticket is completed, canceled or a duplicate.
+    public let done: Bool?
 
-    public init(kind: TrackedKind, itemId: String, label: String, title: String, url: String) {
-        self.kind = kind; self.itemId = itemId; self.label = label; self.title = title; self.url = url
+    public init(kind: TrackedKind, itemId: String, label: String, title: String, url: String, done: Bool? = nil) {
+        self.kind = kind; self.itemId = itemId; self.label = label; self.title = title; self.url = url; self.done = done
     }
 
     public var serviceName: String { kind == .slack ? "Slack" : "Linear" }

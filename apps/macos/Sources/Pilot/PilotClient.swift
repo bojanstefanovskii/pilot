@@ -835,6 +835,12 @@ final class PilotClient: ObservableObject {
         update(session)
     }
 
+    /// Removes an archived chat's worktree or shared workspace now instead of after retention.
+    func reclaimWorkspace(_ sessionId: String) async throws {
+        let session: SessionSummary = try await call("api/sessions/\(sessionId)/reclaim-workspace", body: [String: String]())
+        update(session)
+    }
+
     /// Asks the chat's agent to write a summary artifact of what it did. Only ever on the user's request.
     func writeSummary(sessionId: String) async throws {
         let session: SessionSummary = try await call("api/sessions/\(sessionId)/summary")
