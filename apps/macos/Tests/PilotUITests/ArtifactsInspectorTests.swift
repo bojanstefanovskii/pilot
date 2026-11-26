@@ -9,9 +9,9 @@ import Testing
     #expect(app.inspectorTab == .artifacts)
     #expect(app.terminals.order.isEmpty)
 
-    app.toggleInspector(.changes)
+    app.toggleInspector(.files)
     #expect(app.inspectorVisible)
-    #expect(app.inspectorTab == .changes)
+    #expect(app.inspectorTab == .files)
     app.toggleInspector(.artifacts)
     #expect(app.inspectorVisible)
     #expect(app.inspectorTab == .artifacts)
@@ -26,14 +26,14 @@ import Testing
     app.client.loadFixture(projects: Fixtures.projects, sessions: [session])
     app.selectedSessionId = session.id
 
-    for tab in [InspectorTab.changes, .terminal, .agents, .artifacts, .links] {
+    for tab in [InspectorTab.files, .terminal, .agents, .artifacts, .links] {
         let selection = InspectorToggle.selection(for: tab, in: app)
         selection.wrappedValue = true
         #expect(app.inspectorVisible && app.inspectorTab == tab)
         #expect(selection.wrappedValue)
         selection.wrappedValue = true
         #expect(app.inspectorVisible)
-        for other in [InspectorTab.changes, .terminal, .agents, .artifacts, .links] where other != tab {
+        for other in [InspectorTab.files, .terminal, .agents, .artifacts, .links] where other != tab {
             #expect(!InspectorToggle.selection(for: other, in: app).wrappedValue)
         }
         selection.wrappedValue = false

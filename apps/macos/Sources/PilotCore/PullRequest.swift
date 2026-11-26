@@ -151,11 +151,12 @@ extension SessionSummary {
     /// Done when GitHub merged its PRs (every PR settled, at least one merged), or when its Linear ticket closed
     /// and no PR is still open. The latest merge time, else the archive or last update time.
     public var doneAt: Double? {
+        let prs = linkedPullRequests
         if hasTerminalPullRequest {
-            let merged = linkedPullRequests.filter { $0.state == .merged }
+            let merged = prs.filter { $0.state == .merged }
             if !merged.isEmpty { return merged.compactMap(\.mergedAt).max() ?? archivedAt ?? updatedAt }
         }
-        if isTicketDone, !isWorking, linkedPullRequests.allSatisfy(\.isTerminal) { return archivedAt ?? updatedAt }
+        if isTicketDone, !isWorking, prs.allSatisfy(\.isTerminal) { return archivedAt ?? updatedAt }
         return nil
     }
 

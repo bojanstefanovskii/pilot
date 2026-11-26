@@ -17,6 +17,7 @@ import type {
 } from "@pilot/protocol";
 import { NotFound } from "./errors.ts";
 import { LinearSizeDisk } from "./linear-size.ts";
+import { CLOSED_TYPES } from "./linear-source.ts";
 import { SlackCaseDisk } from "./slack-cases.ts";
 import { parseSlackClassification, type SlackClassification } from "./slack-classifier.ts";
 import { SLACK_SEARCH_CHARS } from "./slack-format.ts";
@@ -41,8 +42,6 @@ export interface SlackGroupId {
 	checkedAt: number;
 }
 /** A chat's triage source. See SessionTrackedSource. */
-/** Linear state types of a closed ticket; mirrors linear-source.ts. */
-const CLOSED_LINEAR_TYPES = new Set(["completed", "canceled", "duplicate"]);
 export interface TrackedSessionSource {
 	sessionId: string;
 	source: SessionTrackedSource;
@@ -1028,7 +1027,7 @@ export class TrackedItemDisk {
 					: typeof metadata.channelName === "string"
 						? `#${metadata.channelName}`
 						: "Slack";
-			const done = row.kind === "linear" && CLOSED_LINEAR_TYPES.has(String(metadata.statusType));
+			const done = row.kind === "linear" && CLOSED_TYPES.has(String(metadata.statusType));
 			sources.push({
 				sessionId: row.chat,
 				source: {

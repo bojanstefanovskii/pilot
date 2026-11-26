@@ -24,9 +24,3 @@ export function missionSummaryMessage(mission: Mission): string {
 		"Publish it as one artifact titled `Summary: <mission>`, or update the existing one, then attach it to the mission with the mission tool's attach action. Do not change code, commit or push.",
 	].join("\n");
 }
-
-/** The chat that writes a mission's summary: its coordinator. */
-export function missionSummarySession(mission: Mission): string {
-	if (!mission.coordinatorSessionId) throw new Error("This mission has no coordinator chat to write its summary");
-	return mission.coordinatorSessionId;
-}

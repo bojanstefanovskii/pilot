@@ -13,7 +13,8 @@ struct FilesPane: View {
     @ObservedObject var model: FilesModel
 
     private var pollingKey: RepositoryPollingKey {
-        RepositoryPollingKey(visible: windowVisible, state: session.state, updatedAt: session.updatedAt)
+        // Not keyed on updatedAt: streaming updates would restart the loop and skip the polling interval.
+        RepositoryPollingKey(visible: windowVisible, state: session.state, updatedAt: 0)
     }
 
     var body: some View {
@@ -21,10 +22,10 @@ struct FilesPane: View {
             // Branch, pull requests and their one-click actions, as Changes showed them.
             if model.openPath == nil {
                 ChangesRepositoryContext(session: session, changes: model.lastChanges)
-                Rectangle().fill(Theme.border).frame(height: 1)
+                HairlineDivider()
             }
             if let path = model.openPath { fileHeader(path) } else { treeHeader }
-            Rectangle().fill(Theme.border).frame(height: 1)
+            HairlineDivider()
             if let error = model.error {
                 Text(error).font(.pilot(.caption)).foregroundStyle(Theme.destructive)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 6)
@@ -117,10 +118,7 @@ struct FilesPane: View {
                 }
             }
             Menu {
-                Button("Copy Path") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(path, forType: .string)
-                }
+                Button("Copy Path") { MessageCopyButton.copy(path) }
                 if let url = localURL(path) {
                     Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                     Button("Open in Default App") { NSWorkspace.shared.open(url) }
@@ -184,8 +182,7 @@ private struct FileTreeRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: isDirectory ? (expanded ? "chevron.down" : "chevron.right") : "")
-                    .font(.pilot(.micro, weight: .semibold)).foregroundStyle(Theme.faintForeground).frame(width: 10)
+                DisclosureChevron(expanded: expanded).opacity(isDirectory ? 1 : 0).frame(width: 10)
                 Image(systemName: isDirectory ? "folder" : "doc")
                     .font(.pilot(.caption)).foregroundStyle(isDirectory ? Theme.mutedForeground : Theme.faintForeground)
                     .frame(width: 14)
@@ -210,7 +207,7 @@ private struct FileTreeRow: View {
             .padding(.leading, 10 + CGFloat(row.depth) * 12)
             .padding(.trailing, 12)
             .frame(height: 24)
-            .background(hovered ? Theme.mutedForeground.opacity(0.08) : .clear)
+            .background(hovered ? Theme.muted : .clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -300,7 +297,12 @@ private final class LineNumberRuler: NSRulerView {
             needsDisplay = true
         }
     }
-    private let font = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
+    /// Resolved once: drawing runs on every scroll.
+    private let attributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular),
+        .foregroundColor: NSColor(Theme.faintForeground),
+    ]
+    private let background = NSColor(Theme.background)
 
     init(textView: NSTextView) {
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
@@ -319,7 +321,7 @@ private final class LineNumberRuler: NSRulerView {
     @objc private func redraw() { needsDisplay = true }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(Theme.background).setFill()
+        background.setFill()
         dirtyRect.fill()
         drawHashMarksAndLabels(in: dirtyRect)
     }
@@ -337,7 +339,6 @@ private final class LineNumberRuler: NSRulerView {
             if lineStarts[mid] <= characters.location { low = mid + 1 } else { high = mid }
         }
         var line = max(0, low - 1)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(Theme.faintForeground)]
         while line < lineStarts.count, lineStarts[line] <= NSMaxRange(characters), lineStarts[line] < max(length, 1) {
             let glyph = layout.glyphIndexForCharacter(at: min(lineStarts[line], max(length - 1, 0)))
             let fragment = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)

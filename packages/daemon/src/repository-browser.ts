@@ -17,6 +17,8 @@ const SCAN_LIMIT = 4096;
 const PAGE_SIZE = 100;
 /** Entries one tree level returns; larger directories are truncated, like an editor's file explorer. */
 const TREE_LIMIT = 2000;
+/** Natural, case-insensitive order, built once: per-call localeCompare options rebuild a collator each time. */
+const TREE_ORDER = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
 
 /** Strict lexical paths plus no symlink components, anchored to a server-owned canonical root. */
 export async function scopedPath(root: string, path: string, allowRoot = false): Promise<string> {
@@ -116,11 +118,7 @@ export class RepositoryBrowser {
 			}
 			if ((await scopedPath(root, path, true)) !== directory) throw new Error("Directory changed while reading");
 			entries.sort((a, b) =>
-				a.kind === b.kind
-					? a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true })
-					: a.kind === "directory"
-						? -1
-						: 1,
+				a.kind === b.kind ? TREE_ORDER.compare(a.name, b.name) : a.kind === "directory" ? -1 : 1,
 			);
 			return { path, entries, truncated };
 		});

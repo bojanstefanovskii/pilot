@@ -111,7 +111,7 @@ import {
 	resolveReviewThreads,
 	testPullRequestMessage,
 } from "./pr-actions.ts";
-import { chatSummaryMessage, missionSummaryMessage, missionSummarySession } from "./work-summary.ts";
+import { chatSummaryMessage, missionSummaryMessage } from "./work-summary.ts";
 import { EnvironmentRevisionConflict, expandHome, type ProjectStore } from "./projects.ts";
 import { PTY_INPUT_CHUNK } from "./pty-input.ts";
 import { RepositoryBrowser } from "./repository-browser.ts";
@@ -891,13 +891,9 @@ export function createDaemonServer(
 			req.method === "POST"
 		) {
 			const mission = missions.store.require(parts[2]!);
-			let coordinator: string;
-			try {
-				coordinator = missionSummarySession(mission);
-			} catch (error) {
-				throw new HttpError(409, error instanceof Error ? error.message : String(error));
-			}
-			if (!sessions.get(coordinator)) throw new HttpError(409, "The mission's coordinator chat is gone");
+			const coordinator = mission.coordinatorSessionId;
+			if (!coordinator || !sessions.get(coordinator))
+				throw new HttpError(409, "This mission has no coordinator chat to write its summary");
 			await sessions.send(coordinator, missionSummaryMessage(mission));
 			return json(res, 202, sessions.get(coordinator));
 		}

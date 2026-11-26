@@ -1250,6 +1250,7 @@ export class SessionManager {
 				state.again = false;
 				const found = new Map((await read(projectId)).map(({ sessionId, source }) => [sessionId, source]));
 				if (this.closing) return;
+				const closed: SessionMeta[] = [];
 				for (const meta of this.metas.values()) {
 					if (meta.projectId !== projectId) continue;
 					const next = found.get(meta.id);
@@ -1258,9 +1259,11 @@ export class SessionManager {
 					if (next) this.trackedSources.set(meta.id, next);
 					else this.trackedSources.delete(meta.id);
 					this.emit(meta);
-					if (next?.done && !previous?.done) await this.archiveDoneTicket(meta);
+					if (next?.done && !previous?.done) closed.push(meta);
 				}
 				for (const id of this.trackedSources.keys()) if (!this.metas.has(id)) this.trackedSources.delete(id);
+				// Archive after the pass, so one slow archive never delays the other chats' sources.
+				await Promise.allSettled(closed.map((meta) => this.archiveDoneTicket(meta)));
 			} while (state.again);
 		})()
 			.catch((error: unknown) => console.warn(`pilotd: could not refresh chat sources: ${error}`))
@@ -9548,7 +9551,6 @@ export class SessionManager {
 		return target;
 	}
 
-	/** A known merge is terminal. Its persisted timestamp is enough for a local archive deadline. */
 	/**
 	 * A chat whose Linear ticket was closed is finished: archive it, so its worktree is reclaimed after retention.
 	 * Pinned, working, mission and Ask chats, and chats with an open PR, stay as they are.
@@ -9561,7 +9563,7 @@ export class SessionManager {
 			this.missions?.membership(meta.id) ||
 			hasActivePullRequest(meta) ||
 			this.closing ||
-			this.summary(meta).state === "working"
+			this.workers.get(meta.id)?.busy === true
 		)
 			return;
 		try {
@@ -9572,6 +9574,7 @@ export class SessionManager {
 		}
 	}
 
+	/** A known merge is terminal. Its persisted timestamp is enough for a local archive deadline. */
 	private async archiveMergedPullRequest(meta: SessionMeta): Promise<void> {
 		const target = this.mergeArchiveTarget(meta);
 		if (

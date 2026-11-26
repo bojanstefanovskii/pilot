@@ -9,13 +9,70 @@ struct WorkBoardView: View {
     let kind: Kind
     @ObservedObject var model: AppModel
     @ObservedObject var client: PilotClient
-    @ObservedObject private var pageStates = PageStateStore.shared
+    /// Shown by default and remembered per board while the app runs.
+    @PageState private var showDone: Bool
     /// Done chats the user deleted from the board, newline-separated. Their history stays in the Archive.
     @AppStorage("workBoard.deletedChats") private var deletedChats = ""
     @State private var deleting: SessionSummary?
     @State private var deleteError: String?
     /// How long finished work stays on the board.
     static let doneWindow: Double = 30 * 24 * 3600 * 1000
+
+    init(kind: Kind, model: AppModel, client: PilotClient) {
+        self.kind = kind
+        self.model = model
+        self.client = client
+        _showDone = PageState(wrappedValue: true, "workBoard.\(kind.rawValue).showDone")
+    }
+
+    /// Both lists of the board, built in one pass per render.
+    private struct Lists {
+        var chats: [SessionSummary] = []
+        var doneChats: [SessionSummary] = []
+        var missions: [Mission] = []
+        var doneMissions: [Mission] = []
+        var active: Int { chats.count + missions.count }
+        var done: Int { doneChats.count + doneMissions.count }
+    }
+
+    private var deletedIds: Set<String> { Set(deletedChats.split(separator: "\n").map(String.init)) }
+
+    private func lists() -> Lists {
+        var lists = Lists()
+        let since = Date().timeIntervalSince1970 * 1000 - Self.doneWindow
+        if kind == .missions {
+            var done: [(Mission, Double)] = []
+            for mission in client.missions where mission.archivedAt == nil {
+                if Self.isDone(mission) {
+                    let at = mission.completedAt ?? mission.updatedAt
+                    if at >= since { done.append((mission, at)) }
+                } else { lists.missions.append(mission) }
+            }
+            lists.missions.sort { $0.updatedAt > $1.updatedAt }
+            lists.doneMissions = done.sorted { $0.1 > $1.1 }.map(\.0)
+            return lists
+        }
+        let deleted = deletedIds
+        var done: [(SessionSummary, Double)] = []
+        for session in client.sessions where belongs(session) {
+            // Merged or closed-ticket chats are archived automatically, so done ones come from the archive too.
+            if let at = session.doneAt {
+                if at >= since, !deleted.contains(session.id) { done.append((session, at)) }
+            } else if !session.isArchived {
+                lists.chats.append(session)
+            }
+        }
+        lists.chats.sort { $0.updatedAt > $1.updatedAt }
+        lists.doneChats = done.sorted { $0.1 > $1.1 }.map(\.0)
+        return lists
+    }
+
+    /// Build chats of this kind, mission members excluded: they belong to their mission's card.
+    private func belongs(_ session: SessionSummary) -> Bool {
+        guard session.projectId != nil, !session.isAsk, session.missionId == nil,
+              !session.isMissionCoordinator, !ChatsPage.isFree(session) else { return false }
+        return kind == .quickFixes ? session.kind == .quick : session.kind != .quick
+    }
 
     private var title: String {
         switch kind {
@@ -25,39 +82,6 @@ struct WorkBoardView: View {
         }
     }
 
-    /// Shown by default and remembered per board while the app runs.
-    private var showDone: Binding<Bool> {
-        let key = "workBoard.\(kind.rawValue).showDone"
-        return Binding(get: { pageStates.value(key, default: true) }, set: { pageStates.set(key, $0) })
-    }
-
-    private var since: Double { Date().timeIntervalSince1970 * 1000 - Self.doneWindow }
-
-    /// Build chats of this kind, mission members excluded: they belong to their mission's card.
-    private var kindChats: [SessionSummary] {
-        client.sessions.filter { session in
-            guard session.projectId != nil, !session.isAsk, session.missionId == nil,
-                  !session.isMissionCoordinator, !ChatsPage.isFree(session) else { return false }
-            return kind == .quickFixes ? session.kind == .quick : session.kind != .quick
-        }
-    }
-
-    private var chats: [SessionSummary] {
-        kindChats.filter { !$0.isArchived && !$0.isDone }.sorted { $0.updatedAt > $1.updatedAt }
-    }
-
-    /// Chats whose PRs merged on GitHub or whose Linear ticket closed. Both archive the chat automatically, so they
-    /// come from the archive too.
-    private var doneChats: [SessionSummary] {
-        let deleted = Set(deletedChats.split(separator: "\n").map(String.init))
-        let since = since
-        let done: [(session: SessionSummary, at: Double)] = kindChats.compactMap { session in
-            guard !deleted.contains(session.id), let at = session.doneAt, at >= since else { return nil }
-            return (session, at)
-        }
-        return done.sorted { $0.at > $1.at }.map(\.session)
-    }
-
     /// Archives the chat if needed, removes its worktree now and takes it off the board. The conversation stays
     /// readable in the Archive.
     private func delete(_ session: SessionSummary) async {
@@ -65,51 +89,41 @@ struct WorkBoardView: View {
             if !session.isArchived { _ = try await client.archive(session.id) }
             // Clone workspaces cannot be reclaimed; they are pruned on their own. Leaving the board still applies.
             try? await client.reclaimWorkspace(session.id)
-            let ids = (deletedChats.split(separator: "\n").map(String.init) + [session.id]).suffix(500)
+            let ids = (Array(deletedIds) + [session.id]).suffix(500)
             deletedChats = ids.joined(separator: "\n")
         } catch {
             deleteError = error.localizedDescription
         }
     }
 
-    private var missions: [Mission] {
-        client.missions.filter { $0.archivedAt == nil && !Self.isDone($0) }.sorted { $0.updatedAt > $1.updatedAt }
-    }
-
-    private var doneMissions: [Mission] {
-        client.missions.filter { $0.archivedAt == nil && Self.isDone($0) && ($0.completedAt ?? $0.updatedAt) >= since }
-            .sorted { ($0.completedAt ?? $0.updatedAt) > ($1.completedAt ?? $1.updatedAt) }
-    }
-
     static func isDone(_ mission: Mission) -> Bool { mission.status == .done || mission.completedAt != nil }
-
-    private var doneCount: Int { kind == .missions ? doneMissions.count : doneChats.count }
 
     private let columns = [GridItem(.adaptive(minimum: 260, maximum: 360), spacing: 12)]
 
     var body: some View {
-        ScrollView {
+        let lists = lists()
+        return ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(title).font(.pilot(.title, weight: .semibold))
-                    Text("\(kind == .missions ? missions.count : chats.count)")
+                    Text("\(lists.active)")
                         .font(.pilot(.title)).foregroundStyle(Theme.mutedForeground)
                     Spacer()
-                    Toggle("Show done", isOn: showDone).toggleStyle(.checkbox)
+                    Toggle("Show done", isOn: $showDone).toggleStyle(.checkbox)
                 }
-                if (kind == .missions ? missions.isEmpty : chats.isEmpty) {
+                if lists.active == 0 {
                     Text(emptyText).foregroundStyle(Theme.mutedForeground)
                 }
-                grid(done: false)
-                if showDone.wrappedValue, doneCount > 0 {
+                grid(lists, done: false)
+                if showDone, lists.done > 0 {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.done)
                         Text("Done").font(.pilot(.body, weight: .semibold))
-                        Text("\(doneCount)").foregroundStyle(Theme.mutedForeground)
+                        Text("\(lists.done)").foregroundStyle(Theme.mutedForeground)
                         Text("· last 30 days").font(.pilot(.caption)).foregroundStyle(Theme.faintForeground)
                     }
                     .padding(.top, 8)
-                    grid(done: true)
+                    grid(lists, done: true)
                 }
             }
             .padding(24)
@@ -130,14 +144,14 @@ struct WorkBoardView: View {
         } message: { Text(deleteError ?? "") }
     }
 
-    private func grid(done: Bool) -> some View {
+    private func grid(_ lists: Lists, done: Bool) -> some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
             if kind == .missions {
-                ForEach(done ? doneMissions : missions) { mission in
+                ForEach(done ? lists.doneMissions : lists.missions) { mission in
                     MissionCard(mission: mission, client: client, done: done) { model.openMission(mission.id) }
                 }
             } else {
-                ForEach(done ? doneChats : chats) { session in
+                ForEach(done ? lists.doneChats : lists.chats) { session in
                     ChatCard(session: session, signal: done ? nil : session.signal(unread: model.isUnread(session)),
                              done: done) { model.open(session: session.id) }
                         .contextMenu {

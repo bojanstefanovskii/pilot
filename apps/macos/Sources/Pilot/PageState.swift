@@ -14,6 +14,8 @@ final class PageStateStore: ObservableObject {
     }
 
     func set<Value>(_ key: String, _ value: Value) {
+        // Rewriting the same value (a picker re-selecting, a reload with unchanged data) must not re-render pages.
+        if let new = value as? AnyHashable, let old = values[key] as? AnyHashable, new == old { return }
         objectWillChange.send()
         values[key] = value
     }

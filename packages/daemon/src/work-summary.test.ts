@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Mission, SessionSummary } from "@pilot/protocol";
-import { chatSummaryMessage, missionSummaryMessage, missionSummarySession } from "./work-summary.ts";
+import { chatSummaryMessage, missionSummaryMessage } from "./work-summary.ts";
 
 test("chat summary names its PRs, the skill reference and forbids code changes", () => {
 	const session = {
@@ -14,9 +14,7 @@ test("chat summary names its PRs, the skill reference and forbids code changes",
 	assert.match(message, /Do not change code, commit or push/);
 });
 
-test("mission summary goes to the coordinator and asks to attach the artifact", () => {
+test("mission summary asks the coordinator to attach the artifact", () => {
 	const mission = { id: "m1", title: "Billing", coordinatorSessionId: "c1" } as unknown as Mission;
-	assert.equal(missionSummarySession(mission), "c1");
 	assert.match(missionSummaryMessage(mission), /attach it to the mission/);
-	assert.throws(() => missionSummarySession({ ...mission, coordinatorSessionId: undefined }), /no coordinator/);
 });

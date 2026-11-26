@@ -120,7 +120,7 @@ const MAX_PAGES = 5;
 const FULL_REFRESH_MS = 15 * 60_000;
 const OPEN_TYPES = new Set(["triage", "backlog", "unstarted", "started"]);
 /** Linear reports issues closed as duplicates with their own state type. */
-const CLOSED_TYPES = new Set(["completed", "canceled", "duplicate"]);
+export const CLOSED_TYPES = new Set(["completed", "canceled", "duplicate"]);
 const TYPES = new Set([...OPEN_TYPES, ...CLOSED_TYPES]);
 const DETAIL_FIELDS = [
 	"id",

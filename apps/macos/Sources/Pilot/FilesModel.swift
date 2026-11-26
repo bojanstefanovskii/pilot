@@ -15,8 +15,8 @@ final class FilesModel: ObservableObject {
         var id: String { entry.path }
     }
 
-    /// The open file, highlighted off the main thread.
-    struct Document {
+    /// The open file, highlighted off the main thread. Immutable once built, so it crosses actors safely.
+    struct Document: @unchecked Sendable {
         let path: String
         let text: NSAttributedString
         let lineStarts: [Int]
@@ -35,6 +35,8 @@ final class FilesModel: ObservableObject {
     @Published private(set) var document: Document?
     @Published private(set) var loadingFile = false
     @Published private(set) var changed: [String: ChangedFile] = [:]
+    /// Changed files under each folder, for the folder badges. Built with `changed`, not per row.
+    private(set) var changedInside: [String: Int] = [:]
     @Published private(set) var diffs: [String: FileDiff] = [:]
     @Published private(set) var error: String?
     @Published private(set) var lastChanges: SessionChanges?
@@ -74,10 +76,7 @@ final class FilesModel: ObservableObject {
     }
 
     /// Changed files inside a folder, for its badge.
-    func changedCount(under directory: String) -> Int {
-        let prefix = directory + "/"
-        return changed.keys.reduce(0) { $0 + ($1.hasPrefix(prefix) ? 1 : 0) }
-    }
+    func changedCount(under directory: String) -> Int { changedInside[directory] ?? 0 }
 
     func loadDirectory(_ path: String, client: PilotClient) async {
         do {
@@ -96,10 +95,11 @@ final class FilesModel: ObservableObject {
         if children[directory] == nil { Task { await loadDirectory(directory, client: client) } }
     }
 
-    /// Reloads the root and every expanded folder, so files the agent added or removed appear.
+    /// Reloads the root and every expanded folder at once, so files the agent added or removed appear.
     func reloadTree(client: PilotClient) async {
-        for path in [""] + expanded.sorted() where path.isEmpty || children[path] != nil {
-            await loadDirectory(path, client: client)
+        let paths = [""] + expanded.filter { children[$0] != nil }
+        await withTaskGroup(of: Void.self) { group in
+            for path in paths { group.addTask { await self.loadDirectory(path, client: client) } }
         }
     }
 
@@ -117,10 +117,21 @@ final class FilesModel: ObservableObject {
             let parsed = await Task.detached(priority: .utility) {
                 Dictionary(Diff.parseUnified(changes.diff).map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
             }.value
+            let openDiff = openPath.flatMap { diffs[$0] }
             changed = Dictionary(changes.files.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+            var inside: [String: Int] = [:]
+            for path in changed.keys {
+                var directory = (path as NSString).deletingLastPathComponent
+                while !directory.isEmpty {
+                    inside[directory, default: 0] += 1
+                    directory = (directory as NSString).deletingLastPathComponent
+                }
+            }
+            changedInside = inside
             diffs = parsed
             if treeChanged, hasRoot { await reloadTree(client: client) }
-            if let openPath, changed[openPath] != nil { reopen(client: client) }
+            // Re-read the open file only when the agent changed it again.
+            if let openPath, changed[openPath] != nil, parsed[openPath] != openDiff { reopen(client: client) }
         } catch {
             // Changes are an overlay: the tree stays usable without them.
         }
@@ -148,11 +159,11 @@ final class FilesModel: ObservableObject {
         fileTask = Task { [weak self] in
             do {
                 let content = try await client.file(self?.sessionId ?? "", path: path)
-                let built = await Task.detached(priority: .userInitiated) {
+                let document = await Task.detached(priority: .userInitiated) {
                     FilesModel.highlight(content, palette: palette)
                 }.value
                 guard !Task.isCancelled, let self, self.openPath == path else { return }
-                self.document = built.document
+                self.document = document
                 self.loadingFile = false
                 self.error = nil
             } catch {
@@ -178,21 +189,24 @@ final class FilesModel: ObservableObject {
         }
     }
 
-    private struct Built: @unchecked Sendable { let document: Document }
-
-    nonisolated private static func highlight(_ content: SessionFileContent, palette: SyntaxPalette) -> Built {
+    /// Plain text in one run, then a color only on highlighted tokens: no per-token strings or dictionaries.
+    nonisolated private static func highlight(_ content: SessionFileContent, palette: SyntaxPalette) -> Document {
         let source = content.binary ? "" : content.text
-        let text = NSMutableAttributedString()
-        let base: [NSAttributedString.Key: Any] = [.font: palette.font, .foregroundColor: palette.colors[nil] as Any]
+        let text = NSMutableAttributedString(string: source, attributes: [
+            .font: palette.font, .foregroundColor: palette.colors[nil] as Any,
+        ])
         text.beginEditing()
+        var location = 0
         for token in CodeSyntax.tokens(source, language: CodeSyntax.language(forPath: content.path)) {
-            var attributes = base
-            attributes[.foregroundColor] = palette.colors[token.kind] ?? palette.colors[nil]
-            text.append(NSAttributedString(string: token.text, attributes: attributes))
+            let length = token.text.utf16.count
+            if let kind = token.kind, let color = palette.colors[kind] {
+                text.addAttribute(.foregroundColor, value: color, range: NSRange(location: location, length: length))
+            }
+            location += length
         }
         text.endEditing()
-        return Built(document: Document(path: content.path, text: text, lineStarts: lineStarts(source),
-                                        binary: content.binary, truncated: content.truncated))
+        return Document(path: content.path, text: text, lineStarts: lineStarts(source),
+                        binary: content.binary, truncated: content.truncated)
     }
 
     /// UTF-16 offsets where each line starts, for the line-number gutter.
@@ -211,8 +225,10 @@ final class FilesModel: ObservableObject {
 extension AppModel {
     /// The Files pane state of a chat. Keeps the eight most recently used chats.
     func fileBrowser(for sessionId: String) -> FilesModel {
-        fileBrowserOrder.removeAll { $0 == sessionId }
-        fileBrowserOrder.append(sessionId)
+        if fileBrowserOrder.last != sessionId {
+            fileBrowserOrder.removeAll { $0 == sessionId }
+            fileBrowserOrder.append(sessionId)
+        }
         if let model = fileBrowsers[sessionId] { return model }
         let model = FilesModel(sessionId: sessionId)
         fileBrowsers[sessionId] = model

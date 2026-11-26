@@ -72,8 +72,10 @@ struct ChatTabStrip: View {
     @ObservedObject var client: PilotClient
 
     var body: some View {
-        let sessions = tabs.ids.compactMap { client.session($0) }
-        if sessions.count > 1 || (sessions.count == 1 && sessions.first?.id != model.selectedSessionId) {
+        let byId = Dictionary(client.sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let sessions = tabs.ids.compactMap { byId[$0] }
+        // Shown once there is another tab than the chat on screen.
+        if sessions.contains(where: { $0.id != model.selectedSessionId }) {
             VStack(spacing: 0) {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -93,7 +95,7 @@ struct ChatTabStrip: View {
                         if let id { proxy.scrollTo(id) }
                     }
                 }
-                Rectangle().fill(Theme.border).frame(height: 1)
+                HairlineDivider()
             }
             .background(Theme.background)
         }
@@ -112,7 +114,7 @@ private struct ChatTab: View {
     var body: some View {
         HStack(spacing: 6) {
             if let signal { StatusMarkShape(signal: signal, background: session.isWaitingOnJobs) }
-            Text(session.trackedSource?.label.isEmpty == false ? "\(session.trackedSource!.label) · \(session.title)" : session.title)
+            Text(session.trackedSource.map { $0.label.isEmpty ? session.title : "\($0.label) · \(session.title)" } ?? session.title)
                 .font(.pilot(.label, weight: selected ? .medium : .regular))
                 .foregroundStyle(selected ? Theme.foreground : Theme.mutedForeground)
                 .lineLimit(1)
@@ -120,7 +122,7 @@ private struct ChatTab: View {
             Button(action: close) { PilotSymbol(PilotIcon.dismiss, context: .inline) }
                 .buttonStyle(.borderless)
                 .foregroundStyle(Theme.faintForeground)
-                .opacity(hovered || selected ? 1 : 0)
+                .revealed(hovered || selected)
                 .help("Close tab (⌥⌘W)")
                 .accessibilityLabel("Close \(session.title)")
         }
@@ -129,7 +131,7 @@ private struct ChatTab: View {
         .frame(height: 26)
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(selected ? Theme.card : hovered ? Theme.mutedForeground.opacity(0.08) : .clear)
+                .fill(selected ? Theme.card : hovered ? Theme.muted : .clear)
         )
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(selected ? Theme.border : .clear))
         .contentShape(Rectangle())
