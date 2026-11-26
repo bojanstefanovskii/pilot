@@ -7,11 +7,12 @@ import type {
 	ScheduleTarget,
 	SpawnRequest,
 } from "@pilot/protocol";
+import { nextCronTime, parseCron } from "./cron.ts";
 import { Conflict, NotFound, ServiceUnavailable } from "./errors.ts";
 import type { MissionStore } from "./missions.ts";
 import type { ProjectStore } from "./projects.ts";
 import type { ScheduleStore } from "./schedule-store.ts";
-import type { TrackedItemStore } from "./tracked-items.ts";
+import { type TrackedItemLinker, WorkStarter } from "./work-starter.ts";
 
 /** Detection plugs in here. Initial online state is not an offline→online edge. */
 export type ScheduleTriggerEvent =
@@ -52,7 +53,8 @@ export interface ScheduleServiceDeps {
 	sessions: ScheduleDispatch;
 	projects: Pick<ProjectStore, "require">;
 	missions?: Pick<MissionStore, "require">;
-	trackedItems?: Pick<TrackedItemStore, "require" | "patch">;
+	/** Link through `trackedItemLinker` so scheduled chats also apply the item's external start. */
+	trackedItems?: TrackedItemLinker;
 	clock?: ScheduleClock;
 	triggers?: ScheduleTriggerSource;
 }
@@ -226,15 +228,24 @@ export class ScheduleService {
 		let sessionId: string | undefined;
 		try {
 			if (claimed.target.kind === "chat") {
-				// Recheck the local ticket's project binding before admission.
+				// Recheck the local ticket's project binding before admission, then link it through the
+				// linker so the ticket also gets its external start (Linear In progress, Slack eyes).
 				await this.validateTrackedItem(claimed.target.trackedItemId, claimed.projectId);
-				sessionId = (await this.deps.sessions.spawn(claimed.target.spawn)).id;
-				if (claimed.target.trackedItemId)
-					await this.deps.trackedItems!.patch(claimed.target.trackedItemId, { sessionId, start: true });
+				const started = await new WorkStarter({
+					sessions: this.deps.sessions,
+					trackedItems: this.deps.trackedItems,
+				}).startChat({ spawn: claimed.target.spawn, trackedItemId: claimed.target.trackedItemId });
+				sessionId = started.sessionId;
+				if (started.linkError) throw new Error(started.linkError);
 			} else {
 				sessionId = claimed.target.sessionId;
 				if (!this.deps.sessions.get(sessionId)) throw new NotFound("Target chat was deleted");
-				await this.deps.sessions.send(sessionId, claimed.target.message, "followUp", `schedule:${claimed.id}`);
+				await this.deps.sessions.send(
+					sessionId,
+					claimed.target.message,
+					"followUp",
+					claimed.cron ? `schedule:${claimed.id}:${claimed.runs ?? 0}` : `schedule:${claimed.id}`,
+				);
 			}
 			next = { ...claimed, sessionId, state: "fired", firedAt: this.time.now(), updatedAt: this.time.now() };
 		} catch (error) {
@@ -244,6 +255,17 @@ export class ScheduleService {
 				state: "failed",
 				error: (error instanceof Error ? error.message : String(error)).slice(0, 1000),
 				updatedAt: this.time.now(),
+			};
+		}
+		// A routine re-arms at its next time; the run's outcome stays visible on the pending row.
+		if (claimed.cron) {
+			const { claimedAt: _claimed, error: _error, ...rest } = next;
+			next = {
+				...rest,
+				state: "pending",
+				at: nextCronTime(claimed.cron, this.time.now()),
+				runs: (claimed.runs ?? 0) + 1,
+				...(next.state === "failed" ? { error: next.error } : {}),
 			};
 		}
 		// A persistence failure leaves the durable claim intact. Never redispatch automatically.
@@ -277,18 +299,22 @@ export class ScheduleService {
 		if (old.state !== "pending") throw new Conflict("Only pending schedules can be edited");
 		if (patch.expectedRevision !== undefined && patch.expectedRevision !== old.revision)
 			throw new Conflict("Schedule changed; reload before editing");
-		const trigger = patch.trigger ?? old.trigger;
+		const cron = patch.cron === null ? undefined : (patch.cron ?? old.cron);
+		const trigger = cron ? "at" : (patch.trigger ?? old.trigger);
 		if (trigger === "removed") throw new Error("Invalid schedule trigger");
 		const data = await this.validate({
 			title: patch.title ?? old.title,
 			trigger,
-			at: trigger === "at" ? (patch.at ?? old.at) : patch.at,
+			// A new recurrence recomputes its next run unless the patch names one.
+			at: patch.cron ? patch.at : trigger === "at" ? (patch.at ?? old.at) : patch.at,
+			...(cron ? { cron } : {}),
 			target: patch.target ?? old.target,
 		});
 		return this.store.replace(old, {
 			...old,
 			...data,
 			at: data.at,
+			cron: data.cron,
 			projectId: data.projectId,
 			sessionId: data.sessionId,
 			wakeObserved: undefined,
@@ -343,11 +369,19 @@ export class ScheduleService {
 	}
 	private async validate(
 		request: ScheduleRequest,
-	): Promise<Pick<ScheduledItem, "title" | "trigger" | "at" | "target" | "projectId" | "sessionId">> {
+	): Promise<Pick<ScheduledItem, "title" | "trigger" | "at" | "cron" | "target" | "projectId" | "sessionId">> {
 		if (!request || typeof request !== "object" || Array.isArray(request))
 			throw new Error("Schedule request is required");
 		if ("networkNames" in request) throw new Error("Wi-Fi triggers were removed");
-		const trigger = request.trigger === undefined ? "on_back" : request.trigger;
+		let cron: string | undefined;
+		if (request.cron !== undefined) {
+			if (request.trigger !== undefined && request.trigger !== "at") throw new Error("cron requires an at trigger");
+			if (typeof request.cron !== "string") throw new Error("cron must be a string");
+			cron = request.cron.trim().replace(/\s+/g, " ");
+			const parsed = parseCron(cron);
+			request = { ...request, at: request.at ?? nextCronTime(parsed, this.time.now()) };
+		}
+		const trigger = cron ? "at" : request.trigger === undefined ? "on_back" : request.trigger;
 		if (!["on_back", "on_wake", "on_online", "at"].includes(trigger)) throw new Error("Invalid schedule trigger");
 		if (trigger === "at") {
 			if (
@@ -380,6 +414,7 @@ export class ScheduleService {
 				"baseBranch",
 				"mode",
 				"workspace",
+				"kind",
 			] as const) {
 				const value = spawn[key];
 				if (value !== undefined) {
@@ -388,7 +423,12 @@ export class ScheduleService {
 				}
 			}
 			if (copy.mode !== undefined && !["build", "ask"].includes(copy.mode)) throw new Error("Invalid chat mode");
-			if (copy.workspace !== undefined && !["clone", "direct"].includes(copy.workspace))
+			if (copy.kind !== undefined && !["quick", "feature"].includes(copy.kind)) throw new Error("Invalid kind");
+			if (spawn.todayDesk !== undefined) {
+				if (typeof spawn.todayDesk !== "boolean") throw new Error("todayDesk must be a boolean");
+				if (spawn.todayDesk) copy.todayDesk = true;
+			}
+			if (copy.workspace !== undefined && !["clone", "direct", "worktree"].includes(copy.workspace))
 				throw new Error("Invalid workspace");
 			projectId = copy.projectId;
 			if (copy.missionId) {
@@ -434,6 +474,7 @@ export class ScheduleService {
 				message.trim().split("\n")[0].slice(0, 200),
 			trigger,
 			at: request.at,
+			...(cron ? { cron } : {}),
 			target,
 			projectId,
 			sessionId,

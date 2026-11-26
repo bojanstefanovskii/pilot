@@ -111,6 +111,7 @@ import { refActivity } from "./ref-activity.ts";
 import { createRepairDiagnosticsTools } from "./repair-diagnostics-tools.ts";
 import { createRepairProposalTool, type RepairProposalCall } from "./repair-proposal-tool.ts";
 import { createSlackStatusTool, SLACK_STATUS_TOOL, type SlackStatusCall } from "./slack-status-tool.ts";
+import { createTodayTool } from "./today-tool.ts";
 import { openSessionStorage } from "./storage.ts";
 import { SubagentBridge, type SubagentCommand } from "./subagents.ts";
 import { startTodoBridge } from "./todo-bridge.ts";
@@ -196,6 +197,8 @@ export interface KernelSessionHooks {
 	callDatabase?: DatabaseCall;
 	/** Executes a `slack_status` tool call in pilotd. The tool is declared only while the chat has a Slack message. */
 	callSlackStatus?: SlackStatusCall;
+	/** Executes a `today_write` tool call in pilotd. Declared only in Today Desk routine chats. */
+	callToday?: import("./today-tool.ts").TodayCall;
 	/** Reads bounded host-local diagnostics through pilotd without touching target workers or transcripts. */
 	callDiagnostics?: DiagnosticsCall;
 	callDiagnosticContext?: DiagnosticContextCall;
@@ -641,6 +644,7 @@ export class KernelSession {
 					questionTool,
 					...(!spec.pilot?.ask ? [createTodoTool(callTodo, () => spec.sessionId)] : []),
 					...(!spec.pilot?.ask && hooks.callSlackStatus ? [createSlackStatusTool(hooks.callSlackStatus)] : []),
+					...(spec.pilot?.todayDesk && hooks.callToday ? [createTodayTool(hooks.callToday)] : []),
 				],
 				...(spec.role === "diagnostics"
 					? {}

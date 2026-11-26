@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { parentPort, workerData } from "node:worker_threads";
 import type { ScheduledItem } from "@pilot/protocol";
+import { nextCronTime } from "./cron.ts";
 
 mkdirSync(dirname(workerData.file), { recursive: true, mode: 0o700 });
 const db = new DatabaseSync(workerData.file);
@@ -40,7 +41,14 @@ parentPort!.on("message", ({ id, method, item, expected, now }) => {
 						delete row.sleepObserved;
 						delete row.wakeObserved;
 					}
-					if (interrupted) {
+					if (interrupted && row.cron) {
+						// A routine keeps its recurrence: the uncertain run is reported, never redispatched.
+						row.state = "pending";
+						row.error = "Last run interrupted by restart; delivery is uncertain. Check its chat.";
+						row.at = nextCronTime(row.cron, now);
+						delete row.claimedAt;
+						row.updatedAt = now;
+					} else if (interrupted) {
 						row.state = "failed";
 						row.error =
 							"Dispatch interrupted by restart; delivery is uncertain. Check the chats before rescheduling.";

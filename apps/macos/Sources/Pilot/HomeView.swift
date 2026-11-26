@@ -25,6 +25,9 @@ final class NewSessionForm: ObservableObject {
     @Published var models = ModelList(models: [])
     @Published var mode: ChatMode = .build { didSet { onDraftChanged?() } }
     @Published var workspace: WorkspaceMode? { didSet { onDraftChanged?() } }
+    @Published var kind: WorkKind = .feature
+    /// The expert agent this chat opens with: a personal skill the first message asks for. nil is the default agent.
+    @Published var agent: ComposerAgent? { didSet { onDraftChanged?() } }
     @Published var pendingBaseBranch: String? { didSet { onDraftChanged?() } }
     @Published var mission: Mission? { didSet { onDraftChanged?() } }
     /// The tracked ticket this chat starts from. Bound to the chat once it starts; the project is locked to it.
@@ -51,13 +54,15 @@ final class NewSessionForm: ObservableObject {
         trackedItem = nil
         mode = .build
         workspace = nil
+        kind = .feature
+        agent = nil
         pendingBaseBranch = nil
         branches.restoreSelection(scope: nil, branch: nil)
     }
 
     func effectiveWorkspace(for project: Project?) -> WorkspaceMode {
         guard let project else { return .direct }
-        return workspace ?? (project.usesPrivateClones ? .clone : .direct)
+        return workspace ?? project.defaultWorkspaceMode
     }
 
     func chooseMode(_ mode: ChatMode) {
@@ -139,12 +144,14 @@ final class NewSessionForm: ObservableObject {
         return SpawnRequest(
             projectId: mission?.projectId ?? project?.id,
             cwd: mission == nil && project == nil ? folder : nil,
-            message: rawAttachments ? message : attachments.message(text: message),
+            message: (agent.map { "Use the \($0.skill) skill.\n\n" } ?? "")
+                + (rawAttachments ? message : attachments.message(text: message)),
             model: model.isEmpty ? nil : model,
             baseBranch: branches.selection(for: scope),
             mode: mode,
             workspace: mode == .build && project != nil ? workspace : nil,
-            missionId: mission?.id
+            missionId: mission?.id,
+            kind: mode == .build && project != nil && kind == .quick ? .quick : nil
         )
     }
 
@@ -215,14 +222,11 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             ZStack(alignment: .top) {
-                // Daytime clouds / evening sea; DitherScene falls back to the procedural sky without them.
-                DitherScene(source: .homeSky, cell: 2.5, fade: 0.45)
-                    .frame(height: 440)
                 VStack(spacing: 0) {
-                    // No heading: the composer sits where it did below the old 24 pt title (290 + ~29 + 16).
+                    // No heading: the composer leads the page.
                     TaskComposer(form: app.newSessionForm, client: app.client, hosts: app.hosts)
                         .frame(maxWidth: 640)
-                        .padding(.top, 335)
+                        .padding(.top, 96)
                     HomeOverview()
                         .frame(maxWidth: Theme.column)
                         .padding(.top, 48)
@@ -372,7 +376,8 @@ struct TaskComposer: View {
                     .disabled(form.busy)
                 ZStack(alignment: .topLeading) {
                     if form.message.isEmpty {
-                        Text(form.mode == .ask ? "Ask about the code, explore an idea, or plan a change…" : "Describe a task, a bug to fix, an idea to try…")
+                        Text(form.agent != nil ? "Describe the bug for the \(form.agent!.title) agent: what happens, for whom, since when…"
+                             : form.mode == .ask ? "Ask about the code, explore an idea, or plan a change…" : "Describe a task, a bug to fix, an idea to try…")
                             .font(fonts.body)
                             .foregroundStyle(Theme.faintForeground)
                             .allowsHitTesting(false)
@@ -460,15 +465,41 @@ struct TaskComposer: View {
                 ModelMenu(model: $form.model, projectDefault: project?.model, list: form.models)
                 if form.mode == .build, let project {
                     Menu {
-                        Button("Project default (\(project.usesPrivateClones ? "Isolated workspace" : "Current checkout"))") { form.workspace = nil }
-                        Button("Isolated workspace") { form.workspace = .clone }
-                        Button("Current checkout") { form.workspace = .direct }
+                        Button("Project default (\(project.defaultWorkspaceMode.title))") { form.workspace = nil }
+                        Button(WorkspaceMode.clone.title) { form.workspace = .clone }
+                        Button(WorkspaceMode.worktree.title) { form.workspace = .worktree }
+                        Button(WorkspaceMode.direct.title) { form.workspace = .direct }
                     } label: {
-                        ChipLabel(title: form.effectiveWorkspace(for: project) == .clone ? "Isolated workspace" : "Checkout", icon: PilotIcon.isolatedWorkspace)
+                        ChipLabel(title: form.effectiveWorkspace(for: project).chipTitle, icon: PilotIcon.isolatedWorkspace)
                     }
                     .chipMenuStyle().fixedSize()
                     .disabled(form.busy)
                     .help("Build workspace for this chat only. Defaults to the project's settings.")
+                    Menu {
+                        ForEach(WorkKind.allCases, id: \.self) { kind in Button(kind.title) { form.kind = kind } }
+                    } label: {
+                        ChipLabel(title: form.kind.title, icon: PilotIcon.isolatedWorkspace)
+                    }
+                    .chipMenuStyle().fixedSize()
+                    .disabled(form.busy)
+                    .help("Quick fix runs the project's light setup; Feature its full setup.")
+                }
+                if project != nil {
+                    Menu {
+                        Button("Default agent") { form.agent = nil }
+                        Divider()
+                        ForEach(ComposerAgent.all) { agent in
+                            Button {
+                                form.agent = agent
+                                form.mode = agent.readOnly ? .ask : .build
+                            } label: { Text("\(agent.title) — \(agent.detail)") }
+                        }
+                    } label: {
+                        ChipLabel(title: form.agent?.title ?? "Agent", icon: PilotIcon.subagents)
+                    }
+                    .chipMenuStyle().fixedSize()
+                    .disabled(form.busy)
+                    .help("Open this chat with an expert agent. Experts investigate in Ask (read-only); switch to Build to let them fix.")
                 }
                 Spacer()
                 if form.busy { ProgressView().controlSize(.small) }
@@ -575,11 +606,12 @@ struct TaskComposer: View {
                                         icon: .model, current: form.model.isEmpty) { form.model = "" })
         commands += ComposerCommandText.modelCommands(form.models.models, current: form.model) { form.model = $0 }
         if form.mode == .build, project != nil {
-            let choices: [(String, WorkspaceMode?)] = [("Project default", nil), ("Isolated workspace", .clone),
-                                                       ("Current checkout", .direct)]
+            let choices: [(String, WorkspaceMode?)] = [("Project default", nil), (WorkspaceMode.clone.title, .clone),
+                                                       (WorkspaceMode.worktree.title, .worktree),
+                                                       (WorkspaceMode.direct.title, .direct)]
             for (title, workspace) in choices {
                 commands.append(ComposerCommand(id: "workspace:\(title)", title: "Workspace: \(title)",
-                                                keywords: ["workspace", "clone", "checkout"], icon: .isolatedWorkspace,
+                                                keywords: ["workspace", "clone", "worktree", "checkout"], icon: .isolatedWorkspace,
                                                 current: form.workspace == workspace) { form.workspace = workspace })
             }
         }
@@ -689,7 +721,8 @@ struct TaskComposer: View {
             defer { form.busy = false }
             do {
                 _ = try await client.createSchedule(ScheduleRequest(
-                    title: title, trigger: when.trigger, at: when.at, target: target
+                    title: title, trigger: when.cron == nil ? when.trigger : nil, at: when.at, cron: when.cron,
+                    target: target
                 ))
                 if let id = request.projectId { lastProjectId = id }
                 _ = form.completeSubmission(revision: revision)
@@ -853,4 +886,22 @@ struct ModelMenu: View {
     private func displayName(_ id: String) -> String {
         list.models.first { $0.id == id }?.name ?? (id.split(separator: "/").last.map(String.init) ?? id)
     }
+}
+
+/// An expert the composer can open a chat with: one of the user's personal skills.
+struct ComposerAgent: Identifiable, Hashable {
+    let title: String
+    let skill: String
+    let detail: String
+    var id: String { skill }
+    /// Experts investigate read-only (Ask); Fix it then starts the Build chat.
+    var readOnly: Bool { skill != "sideletter-from-slack" }
+
+    static let all: [ComposerAgent] = [
+        ComposerAgent(title: "Bug investigator", skill: "investigate-bug", detail: "finds the root cause, picks the right expert"),
+        ComposerAgent(title: "Renewals", skill: "specialist-renewals", detail: "renewal not created, sent, priced or confirmed"),
+        ComposerAgent(title: "Risk Management", skill: "specialist-rm", detail: "eligibility, RM pricing, limits and options"),
+        ComposerAgent(title: "Insurance", skill: "specialist-insurance", detail: "policies, contracts, quotes, billing, claims"),
+        ComposerAgent(title: "Sideletter", skill: "sideletter-from-slack", detail: "new or exchanged broker side letter"),
+    ]
 }

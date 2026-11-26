@@ -372,6 +372,17 @@ final class PilotClient: ObservableObject {
         return session
     }
 
+    /// Starts a chat and links a tracked item with its external start (Linear In progress, Slack eyes) in one call.
+    /// A link failure keeps the chat and comes back as `linkError`.
+    func startWorkChat(_ request: StartWorkChatRequest) async throws -> StartWorkChatResponse {
+        let response: StartWorkChatResponse = try await call("api/work/chat", body: request)
+        if self.session(response.session.id) == nil {
+            awaitingList[response.session.id] = response.session
+            update(response.session)
+        }
+        return response
+    }
+
     /// A receipt may arrive before the session-list stream, including after reconnect.
     /// Read the exact existing chat, never create a replacement to make navigation work.
     func createdSession(_ id: String) async throws -> SessionSummary {
@@ -417,6 +428,14 @@ final class PilotClient: ObservableObject {
     }
 
     /// Reloads a failed startup using its original queued messages, without creating a new attempt.
+    /// Give a squad agent its own environment instead of the mission's shared one.
+    func isolateWorkspace(_ sessionId: String) async throws {
+        let session: SessionSummary = try await call(
+            "api/sessions/\(sessionId)/isolate", body: [String: String]()
+        )
+        update(session)
+    }
+
     func retryStartup(_ sessionId: String) async throws {
         let session: SessionSummary = try await call(
             "api/sessions/\(sessionId)/retry-startup", body: [String: String]()
@@ -743,6 +762,85 @@ final class PilotClient: ObservableObject {
         return session
     }
 
+    /// The user's own PRs in the project's repository, open and recent.
+    func myPullRequests(projectId: String) async throws -> [MyPullRequest] {
+        let list: MyPullRequests = try await get(try artifactURL(["projects", projectId, "my-pull-requests"]))
+        return list.pullRequests
+    }
+
+    /// Open PRs in the project's repository that request the user's review.
+    func reviewRequests(projectId: String) async throws -> [PullRequestReviewRequest] {
+        let list: PullRequestReviewRequests = try await get(try artifactURL(["projects", projectId, "review-requests"]))
+        return list.requests
+    }
+
+    /// Starts a Build chat on the PR's branch that tries it without changing it.
+    func testPullRequest(projectId: String, number: Int) async throws -> SessionSummary {
+        let session: SessionSummary = try await call(url: try artifactURL(["projects", projectId, "test-pull-request"]),
+                                                     method: "POST", body: ["number": number])
+        update(session)
+        return session
+    }
+
+    private struct LastReply: Decodable, Sendable { let text: String }
+
+    /// The agent's latest reply, to prefill a Slack reply draft.
+    func lastReply(_ sessionId: String) async throws -> String {
+        let reply: LastReply = try await get(try artifactURL(["sessions", sessionId, "last-reply"]))
+        return reply.text
+    }
+
+    /// Posts the user's approved reply in the tracked Slack message's thread.
+    func replyInSlack(itemId: String, text: String) async throws {
+        let _: [String: Bool] = try await call(url: try artifactURL(["tracked-items", itemId, "slack-reply"]),
+                                               method: "POST", body: ["text": text])
+    }
+
+    /// Starts a Build chat that fixes what an Ask investigation concluded.
+    func fixIt(_ sessionId: String, kind: WorkKind? = nil) async throws -> SessionSummary {
+        let session: SessionSummary = try await call(
+            "api/sessions/\(sessionId)/fix-it", body: ["kind": kind?.rawValue].compactMapValues { $0 }
+        )
+        update(session)
+        return session
+    }
+
+    func today(date: String? = nil) async throws -> TodayPage {
+        var components = URLComponents(url: try artifactURL(["today"]), resolvingAgainstBaseURL: false)!
+        if let date { components.queryItems = [URLQueryItem(name: "date", value: date)] }
+        return try await get(components.url!)
+    }
+
+    func patchTodayItem(_ id: String, date: String, _ patch: TodayItemPatch) async throws -> TodayItem {
+        var components = URLComponents(url: try artifactURL(["today", "items", id]), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "date", value: date)]
+        return try await call(url: components.url!, method: "PATCH", body: patch)
+    }
+
+    /// Sends the agent a one-click PR request, as if the user wrote it.
+    func pullRequestAction(_ sessionId: String, _ action: PullRequestAction, url: String? = nil) async throws {
+        let session: SessionSummary = try await call(
+            "api/sessions/\(sessionId)/pull-request-actions", body: PullRequestActionRequest(action: action, url: url)
+        )
+        update(session)
+    }
+
+    func reviewThreads(_ sessionId: String, url: String) async throws -> PullRequestReviewThreads {
+        var components = URLComponents(url: try artifactURL(["sessions", sessionId, "review-threads"]),
+                                       resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "url", value: url)]
+        return try await get(components.url!)
+    }
+
+    /// Resolves on GitHub only the threads the user confirmed.
+    func resolveReviewThreads(_ sessionId: String, url: String, threadIds: [String]) async throws -> [String] {
+        let response: ResolveReviewThreadsResponse = try await call(
+            "api/sessions/\(sessionId)/review-threads/resolve",
+            body: ResolveReviewThreadsRequest(url: url, threadIds: threadIds)
+        )
+        return response.resolved
+    }
+
     /// Detaches a PR from the chat: no tracking, follow-ups or rediscovery, and its mission task link is removed.
     @discardableResult
     func unbindPullRequest(_ sessionId: String, url: String) async throws -> SessionSummary {
@@ -1060,11 +1158,11 @@ final class PilotClient: ObservableObject {
     func remoteBranches(_ projectId: String, mode: ChatMode = .build, workspace: WorkspaceMode? = nil) async throws -> RemoteBranchList {
         if let fixtureBranches { return fixtureBranches }
         var url = try artifactURL(["projects", projectId, "branches"])
-        if mode == .ask || workspace == .clone {
+        if mode == .ask || workspace?.isIsolated == true {
             var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
             components.queryItems = mode == .ask
                 ? [URLQueryItem(name: "mode", value: "ask")]
-                : [URLQueryItem(name: "workspace", value: "clone")]
+                : [URLQueryItem(name: "workspace", value: workspace?.rawValue ?? "clone")]
             url = components.url!
         }
         return try await get(url)

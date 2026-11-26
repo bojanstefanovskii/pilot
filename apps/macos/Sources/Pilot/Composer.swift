@@ -299,14 +299,13 @@ struct Composer: View {
                 controls
             }
             // Strips inside keep their own hover fills; the corner below is the tray's, not a row's.
-            .environment(\.rowHasDitherCorner, false)
+            .environment(\.rowHasStatusMark, false)
             .animation(Theme.Motion.standard(reduceMotion: reduceMotion), value: showsQueue)
             .animation(Theme.Motion.standard(reduceMotion: reduceMotion), value: systemMessages.isEmpty)
             .animation(Theme.Motion.standard(reduceMotion: reduceMotion), value: showsStatusLines)
             // Behind the opaque editor card, so it shows only in the tray's margin and beside the controls, and
             // clipped to the tray's rounded shape.
-            .ditherCorner(corner.signal, background: corner.background, outset: EdgeInsets(),
-                          cornerRadius: Theme.Radius.tray, extent: ComposerCorner.extent, recedes: false)
+            .statusMark(corner.signal, background: corner.background)
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.tray)
                     .fill(Theme.tray)
@@ -595,7 +594,7 @@ struct KeyHints: View {
     }
 }
 
-/// The composer's working corner: the sidebar row's `DitherCorner` signal, limited to work. The agent's own run is
+/// The composer's working corner: the sidebar row's `statusMark` signal, limited to work. The agent's own run is
 /// the full working ripple; a chat that still counts as working while its agent is idle (background jobs) uses the
 /// background ripple, as its sidebar row does. Anything else, including needs-you states, draws nothing here.
 struct ComposerCorner: Equatable {

@@ -418,7 +418,7 @@ struct SubagentsPane: View {
     }
 }
 
-/// One subagent in the Agents list: its name and task. The row's dithered corner carries its state.
+/// One subagent in the Agents list: its name and task. The row's status mark carries its state.
 private struct SubagentRow: View {
     let subagent: SessionSubagent
     let open: () -> Void

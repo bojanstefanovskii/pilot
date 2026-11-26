@@ -3,20 +3,20 @@ import PilotCore
 import SwiftUI
 
 // Rows and helpers shared by the Inbox, Home and a project's Overview. They name the project only when a list mixes
-// projects, read like the chat's sidebar row on their second line, and carry the sidebar's dithered corner.
+// projects, read like the chat's sidebar row on their second line, and carry the sidebar's status mark.
 
 extension View {
     /// Keep the corner, selection and hit target on the same row bounds. HoverRow reserves the trailing room
     /// inside its content, so actions stay aligned without detaching the corner from the row's fill. Unlike the
     /// sidebar, these rows have no native selection outsets. Corner size and hover recession stay unchanged.
     func inboxCorner(_ signal: SessionSignal?, background: Bool = false) -> some View {
-        ditherCorner(signal, background: background, outset: EdgeInsets())
+        statusMark(signal, background: background)
             .environment(\.rowTrailingGutter, InboxRowLayout.cornerGutter)
     }
 }
 
 /// The body of an Inbox or Overview row: the title, the sidebar-like second line and a trailing action or time.
-/// There is no leading status icon: the row's dithered corner (`inboxCorner`) carries its state, as in the
+/// There is no leading status icon: the row's status mark (`inboxCorner`) carries its state, as in the
 /// sidebar. Divide these rows with `HairlineDivider(leading: InboxRowLayout.dividerInset)`.
 struct InboxRowLabel<Detail: View, Trailing: View>: View {
     let title: String

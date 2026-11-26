@@ -1,5 +1,6 @@
 /** Host-owned Ask tools. No model-supplied command, executable, revision or Git pathspec is accepted. */
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { Type } from "@earendil-works/pi-ai";
@@ -13,6 +14,27 @@ const MAX_OUTPUT_BYTES = 50 * 1024;
 const MAX_SEARCH_BYTES = 32 * 1024 * 1024;
 const UUID_PNG = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.png$/i;
 export const ASK_ATTACHMENTS = join(homedir(), "Library", "Application Support", "Pilot", "Attachments");
+/** The user's personal skill folders, loaded in Ask too so expert agents work read-only. `~/.agents/skills` is
+ * added only for the real pi agent directory, so isolated agent directories stay hermetic. */
+export function askSkillRoots(agentDir: string): string[] {
+	const roots = [join(agentDir, "skills")];
+	if (resolve(agentDir) === join(homedir(), ".pi", "agent")) roots.push(join(homedir(), ".agents", "skills"));
+	return roots.filter((root) => existsSync(root));
+}
+
+/** Each skill root plus the real folder of every skill in it, since personal skills are often symlinks. */
+async function skillFolders(roots: readonly string[]): Promise<string[]> {
+	const folders: string[] = [];
+	for (const root of roots) {
+		folders.push(root);
+		const entries = await readdir(root).catch(() => [] as string[]);
+		for (const entry of entries) {
+			const real = await realpath(join(root, entry)).catch(() => undefined);
+			if (real) folders.push(real);
+		}
+	}
+	return folders;
+}
 export const ASK_TOOL_NAMES = [
 	"read",
 	"find",
@@ -61,9 +83,10 @@ function glob(pattern: string): (path: string) => boolean {
 
 export async function createAskTools(
 	ask: AskContext,
-	options: { artifactSkill?: boolean } = {},
+	options: { artifactSkill?: boolean; skillRoots?: readonly string[] } = {},
 ): Promise<ToolDefinition[]> {
 	const reader = new SourceReader(ask);
+	const skills = await skillFolders(options.skillRoots ?? []);
 	if (ask.commit && (await reader.git(["cat-file", "-t", ask.commit])).toString().trim() !== "commit")
 		throw new Error("Ask snapshot must pin a commit object");
 	const path = Type.Optional(
@@ -100,6 +123,9 @@ export async function createAskTools(
 					// Exact host-owned documents only. Never grant access to their directories,
 					// siblings, aliases, or model-supplied skill paths (including pinned-tree Ask).
 					bytes = await readFile(args.path, { signal });
+				} else if (isAbsolute(args.path) && skills.some((folder) => contained(folder, absolute))) {
+					// Personal skill instructions and references, read-only.
+					bytes = await readFile(absolute, { signal });
 				} else if (
 					isAbsolute(args.path) &&
 					contained(ASK_ATTACHMENTS, absolute) &&

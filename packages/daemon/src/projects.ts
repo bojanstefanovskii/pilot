@@ -22,6 +22,7 @@ import {
 } from "./environment-profile.ts";
 import { Conflict, NotFound, ServiceUnavailable } from "./errors.ts";
 import { projectOriginIdentity } from "./project-origin.ts";
+import { validateWorkspaceScripts } from "./workspace-scripts.ts";
 import { listRemoteBranches, type Runner, run } from "./workspaces.ts";
 
 export function expandHome(path: string): string {
@@ -206,7 +207,9 @@ export class ProjectStore {
 			createdAt: Date.now(),
 			...(tracking ? { tracking, trackingGeneration: randomUUID() } : {}),
 			...(request.model?.trim() ? { model: request.model.trim() } : {}),
-			...(request.workspace === "direct" ? { workspace: "direct" } : {}),
+			...(request.workspace === "direct" || request.workspace === "worktree"
+				? { workspace: request.workspace }
+				: {}),
 			...(request.requirePullRequest !== undefined ? { requirePullRequest: request.requirePullRequest } : {}),
 		};
 		this.projects.push(project);
@@ -217,6 +220,7 @@ export class ProjectStore {
 	async update(id: string, request: Partial<ProjectRequest>): Promise<Project> {
 		validatePullRequestSetting(request);
 		const tracking = request.tracking === undefined ? undefined : validateTrackingConfig(request.tracking);
+		const scripts = request.scripts === undefined ? undefined : { value: validateWorkspaceScripts(request.scripts) };
 		const project = this.require(id);
 		const next: Project = { ...project };
 		if (tracking) {
@@ -234,10 +238,14 @@ export class ProjectStore {
 			else delete next.model;
 		}
 		if (request.workspace !== undefined) {
-			if (request.workspace === "direct") next.workspace = "direct";
+			if (request.workspace === "direct" || request.workspace === "worktree") next.workspace = request.workspace;
 			else delete next.workspace;
 		}
 		if (request.requirePullRequest !== undefined) next.requirePullRequest = request.requirePullRequest;
+		if (scripts) {
+			if (scripts.value) next.scripts = scripts.value;
+			else delete next.scripts;
+		}
 		this.projects = this.projects.map((existing) => (existing.id === id ? next : existing));
 		await this.persist();
 		return next;

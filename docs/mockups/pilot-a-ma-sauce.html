@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquettes Pilot</title>
+<style>
+:root{
+  --bg:#f7f7f8; --win:#ffffff; --side:#f3f3f5; --hover:#ececef; --sel:#e6e6ea;
+  --line:#e7e7ea; --line2:#dcdce1; --text:#1c1d21; --text2:#5f616b; --text3:#8f919b;
+  --accent:#5b5bd6; --accentSoft:#ededfb; --amber:#d88a0b; --amberSoft:#fdf3e1; --red:#d6453d; --redSoft:#fcebea;
+  --green:#2f9e5b; --greenSoft:#e7f5ec; --card:#fbfbfc; --chip:#f0f0f3; --code:#f5f5f7; --shadow:0 18px 50px rgba(20,20,30,.14),0 2px 6px rgba(20,20,30,.06);
+}
+:root[data-theme="dark"]{
+  --bg:#0c0d10; --win:#15161a; --side:#111215; --hover:#1d1e23; --sel:#23242a;
+  --line:#24252b; --line2:#2e2f36; --text:#e8e8ec; --text2:#a0a2ad; --text3:#6d6f7a;
+  --accent:#8b8bf0; --accentSoft:#23233d; --amber:#e9a23b; --amberSoft:#2e2414; --red:#ef6a62; --redSoft:#321a19;
+  --green:#4fc27f; --greenSoft:#15291d; --card:#191a1f; --chip:#1f2026; --code:#1a1b20; --shadow:0 18px 50px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 20px;position:sticky;top:0;background:var(--bg);z-index:5;border-bottom:1px solid var(--line)}
+.top h1{font-size:14px;margin:0 12px 0 0;font-weight:600}
+.top button{border:1px solid var(--line2);background:var(--win);color:var(--text2);border-radius:7px;padding:5px 10px;font:inherit;cursor:pointer}
+.top button.on{color:var(--text);border-color:var(--text3);font-weight:500}
+.top .sp{flex:1}
+.note{color:var(--text3);font-size:12px;padding:10px 20px 0}
+.stage{padding:18px 20px 40px;display:flex;justify-content:center}
+.win{width:1240px;max-width:100%;height:760px;background:var(--win);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);display:flex;overflow:hidden;position:relative}
+.side{width:236px;flex:none;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:10px 8px}
+.lights{display:flex;gap:7px;padding:4px 8px 14px}.lights i{width:11px;height:11px;border-radius:50%;background:var(--line2)}
+.ws{display:flex;align-items:center;gap:8px;padding:4px 8px 10px;font-weight:600}
+.ws .logo{width:20px;height:20px;border-radius:6px;background:var(--text);color:var(--win);display:grid;place-items:center;font-size:11px}
+.ws .k{margin-left:auto;color:var(--text3);font-weight:400;font-size:11px;border:1px solid var(--line2);border-radius:5px;padding:0 5px}
+.nav a{display:flex;align-items:center;gap:9px;padding:5px 8px;border-radius:6px;color:var(--text2);text-decoration:none;height:28px}
+.nav a:hover{background:var(--hover)}
+.nav a.on{background:var(--sel);color:var(--text);font-weight:500}
+.nav a .n{margin-left:auto;font-size:11px;color:var(--text3)}
+.nav a .n.att{color:var(--amber);font-weight:600}
+.ico{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sec{font-size:11px;color:var(--text3);font-weight:500;padding:14px 8px 4px;display:flex;justify-content:space-between}
+.mi{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;height:28px;color:var(--text)}
+.mi:hover{background:var(--hover)}
+.mi .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.mi .kind{font-size:10.5px;color:var(--text3);border:1px solid var(--line2);border-radius:4px;padding:0 4px}
+.sub{padding-left:24px}.sub .t{color:var(--text2)}
+.mk{width:14px;height:14px;flex:none;display:grid;place-items:center}
+.m-work{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--text3)}
+.m-work.fill{background:var(--text3)}
+.m-need{width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.m-fail{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--red)}
+.m-coord{width:9px;height:9px;transform:rotate(45deg);border:1.5px solid var(--text2)}
+.pr{color:var(--green)}
+.foot{margin-top:auto;padding:8px;color:var(--text3);font-size:11.5px;display:flex;gap:6px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.hdr{height:48px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--line)}
+.hdr .ttl{font-weight:600;font-size:13.5px}
+.hdr .crumb{color:var(--text3)}
+.hdr .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.btn{border:1px solid var(--line2);background:var(--win);color:var(--text);border-radius:6px;padding:4px 10px;font:inherit;font-size:12.5px;display:inline-flex;align-items:center;gap:6px;cursor:default;height:28px;white-space:nowrap}
+.btn.pri{background:var(--text);color:var(--win);border-color:var(--text)}
+.btn.ghost{border-color:transparent;color:var(--text2)}
+.btn.sm{height:24px;padding:2px 8px;font-size:12px}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--chip);border-radius:5px;padding:1px 7px;font-size:11.5px;color:var(--text2);white-space:nowrap}
+.chip.amber{background:var(--amberSoft);color:var(--amber)}.chip.red{background:var(--redSoft);color:var(--red)}.chip.green{background:var(--greenSoft);color:var(--green)}.chip.acc{background:var(--accentSoft);color:var(--accent)}
+.body{flex:1;overflow:auto;padding:6px 0}
+.group{padding:14px 18px 4px;font-size:11.5px;color:var(--text3);font-weight:500;display:flex;align-items:center;gap:8px}
+.group b{color:var(--text2);font-weight:600}
+.row{display:flex;align-items:center;gap:10px;padding:0 18px;height:38px;border-bottom:1px solid var(--line)}
+.row:hover{background:var(--hover)}
+.row .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .why{color:var(--text3);margin-left:8px}
+.row .meta{color:var(--text3);font-size:12px;white-space:nowrap}
+.row.tall{height:auto;padding-top:10px;padding-bottom:10px;align-items:flex-start}
+.mono{font:11.5px/1.5 ui-monospace,"SF Mono",Menlo,monospace}
+.draft{margin:6px 0 0;padding:9px 11px;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--text);max-width:640px}
+.draft .lbl{font-size:11px;color:var(--text3);margin-bottom:4px}
+.acts{display:flex;gap:6px;margin-top:8px}
+.split{flex:1;display:flex;min-height:0}
+.col{flex:1;display:flex;flex-direction:column;min-width:0}
+.rail{width:330px;flex:none;border-left:1px solid var(--line);overflow:auto;background:var(--win)}
+.rail h4{margin:0;padding:14px 16px 6px;font-size:11.5px;color:var(--text3);font-weight:500}
+.ritem{padding:8px 16px;display:flex;gap:9px;align-items:flex-start}
+.ritem .t{font-weight:500}.ritem .s{color:var(--text3);font-size:12px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:4px 8px;padding:4px 16px 10px;font-size:12px}
+.kv span:nth-child(odd){color:var(--text3)}
+.chat{flex:1;overflow:auto;padding:18px 28px}
+.msg{max-width:720px;margin:0 0 16px}
+.msg .who{font-size:12px;color:var(--text3);margin-bottom:3px}
+.msg.user .bub{background:var(--chip);display:inline-block;padding:8px 12px;border-radius:10px}
+.tool{color:var(--text3);font-size:12px;display:flex;gap:6px;align-items:center;margin:4px 0}
+.plan{border:1px solid var(--line);border-radius:8px;margin-top:6px}
+.plan div{display:flex;gap:9px;align-items:center;padding:7px 11px;border-top:1px solid var(--line)}.plan div:first-child{border-top:0}
+.pie{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--text3);flex:none}
+.pie.p1{background:conic-gradient(var(--text3) 0 33%,transparent 0)}.pie.p2{background:conic-gradient(var(--text3) 0 66%,transparent 0)}.pie.p3{background:var(--green);border-color:var(--green)}
+.composer{margin:0 28px 18px;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;color:var(--text3);display:flex;align-items:flex-end;gap:8px;min-height:74px;flex-direction:column;align-items:stretch}
+.composer .ctl{display:flex;gap:6px;align-items:center;margin-top:auto}
+.composer .ctl .chip{background:transparent;border:1px solid var(--line2)}
+.prbar{display:flex;align-items:center;gap:10px;padding:8px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+.tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line)}
+.tabs span{padding:6px 10px;color:var(--text3);border-bottom:2px solid transparent;font-size:12.5px}
+.tabs span.on{color:var(--text);border-color:var(--text)}
+.file{display:flex;gap:8px;padding:6px 14px;align-items:center;font-size:12.5px}
+.file .st{width:16px;color:var(--text3);font-weight:600;font-size:11px}
+.add{color:var(--green)}.del{color:var(--red)}
+.diff{margin:6px 10px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.dl{display:flex;font:11.5px/1.7 ui-monospace,"SF Mono",Menlo,monospace}
+.dl .n{width:34px;text-align:right;padding-right:8px;color:var(--text3);flex:none}
+.dl.a{background:var(--greenSoft)}.dl.sel{background:var(--accentSoft);box-shadow:inset 2px 0 var(--accent)}
+.cm{margin:4px 8px 8px 42px;border:1px solid var(--line2);border-radius:8px;padding:8px 10px;background:var(--win);font-size:12px}
+.board{display:flex;gap:12px;padding:14px 18px;overflow:auto;flex:1}
+.lane{width:250px;flex:none}
+.lane h5{margin:0 0 8px;font-size:12px;font-weight:500;color:var(--text2);display:flex;gap:7px;align-items:center}
+.card{border:1px solid var(--line);border-radius:8px;background:var(--win);padding:9px 10px;margin-bottom:8px}
+.card .id{font-size:11px;color:var(--text3)}.card .tt{margin:2px 0 7px}
+.card .f{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.card.new{box-shadow:inset 2px 0 var(--accent)}
+.scrim{position:absolute;inset:0;background:rgba(10,10,15,.28);display:grid;place-items:center}
+.sheet{width:520px;background:var(--win);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.sheet .sh{padding:16px 18px 6px}
+.sheet .sh .id{color:var(--text3);font-size:12px}.sheet .sh .tt{font-weight:600;font-size:15px;margin-top:2px}
+.opt{display:flex;gap:12px;padding:11px 14px;margin:6px 12px;border:1px solid var(--line);border-radius:9px;align-items:flex-start}
+.opt.on{border-color:var(--text);box-shadow:0 0 0 1px var(--text)}
+.radio{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--text3);margin-top:2px;flex:none}
+.opt.on .radio{border:4px solid var(--text)}
+.opt .t{font-weight:600}.opt .d{color:var(--text3);font-size:12px;margin-top:2px}
+.opt .tags{display:flex;gap:5px;margin-top:6px}
+.sheet .sf{display:flex;align-items:center;gap:8px;padding:12px 14px;border-top:1px solid var(--line);margin-top:8px}
+.today{padding:22px 34px;overflow:auto;flex:1}
+.today h2{font-size:20px;margin:0;font-weight:600}
+.today .lead{color:var(--text3);margin:2px 0 18px}
+.grid{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}
+.box h3{font-size:12px;color:var(--text3);font-weight:500;margin:0 0 6px;display:flex;justify-content:space-between}
+.task{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--line);align-items:flex-start}
+.task .cb{width:15px;height:15px;border:1.5px solid var(--line2);border-radius:4px;flex:none;margin-top:2px}
+.task .t{font-weight:500}.task .w{color:var(--text3);font-size:12px;margin-top:1px}
+.task .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.say{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.say p{margin:3px 0;color:var(--text2)}.say b{color:var(--text);font-weight:600}
+.prog{height:4px;background:var(--chip);border-radius:3px;overflow:hidden;margin-top:6px}.prog i{display:block;height:100%;background:var(--accent)}
+.screen{display:none}.screen.on{display:block}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Maquettes Pilot</h1>
+  <span id="tabs"></span>
+  <span class="sp"></span>
+  <button id="th">Sombre</button>
+</div>
+<div class="note">Maquettes HTML statiques avec des données fictives, pas les vraies vues SwiftUI. Elles servent à valider la structure et le ton visuel ; le rendu natif viendra avec Theme v2.</div>
+
+<!-- SIDEBAR TEMPLATE -->
+<template id="sidebar">
+<aside class="side">
+  <div class="lights"><i></i><i></i><i></i></div>
+  <div class="ws"><span class="logo">P</span>Pilot<span class="k">⌘K</span></div>
+  <nav class="nav">
+    <a data-k="inbox"><svg class="ico" viewBox="0 0 16 16"><path d="M2 9h3l1 2h4l1-2h3M3 3h10l1 6v4H2V9z"/></svg>Inbox<span class="n att">4</span></a>
+    <a data-k="today"><svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg>Today<span class="n">5</span></a>
+    <a data-k="sprint"><svg class="ico" viewBox="0 0 16 16"><rect x="2" y="3" width="3.5" height="10" rx="1"/><rect x="6.25" y="3" width="3.5" height="7" rx="1"/><rect x="10.5" y="3" width="3.5" height="5" rx="1"/></svg>Mon sprint</a>
+    <a data-k="reviews"><svg class="ico" viewBox="0 0 16 16"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V7a2 2 0 0 0-2-2H7.5"/></svg>Reviews<span class="n">3</span></a>
+    <a data-k="routines"><svg class="ico" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v2.5h-2.5"/></svg>Routines</a>
+  </nav>
+  <div class="sec"><span>En cours</span><span>+</span></div>
+  <div class="mi"><span class="mk"><span class="m-work"></span></span><span class="t">INSDIS-2033 HubSpot agency</span><span class="kind">Feature</span></div>
+  <div class="mi" data-k="squad"><span class="mk"><span class="m-need"></span></span><span class="t">Refonte éditions</span><span class="kind">Squad</span></div>
+  <div class="mi sub"><span class="mk"><span class="m-coord"></span></span><span class="t">orchestrateur</span></div>
+  <div class="mi sub"><span class="mk"><span class="m-work fill"></span></span><span class="t">agent API</span></div>
+  <div class="mi sub"><span class="mk"><span class="m-need"></span></span><span class="t">agent client</span></div>
+  <div class="mi sub"><span class="mk"><span class="m-work"></span></span><span class="t">agent tests</span></div>
+  <div class="mi"><span class="mk"><svg class="ico pr" viewBox="0 0 16 16"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V7a2 2 0 0 0-2-2H7.5"/></svg></span><span class="t">Fix wording éditions</span><span class="kind">Quick fix</span></div>
+  <div class="mi"><span class="mk"><span class="m-fail"></span></span><span class="t">Bug RM · guarantee config</span><span class="kind">Investigate</span></div>
+  <div class="sec"><span>Projets</span></div>
+  <div class="mi"><span class="t" style="color:var(--text2)">product</span></div>
+  <div class="mi"><span class="t" style="color:var(--text2)">risk-management</span></div>
+  <div class="mi"><span class="t" style="color:var(--text2)">pilot</span></div>
+  <div class="foot"><span class="dot"></span>pilotd local · 4 agents</div>
+</aside>
+</template>
+
+<!-- 1 INBOX -->
+<section class="screen" data-s="inbox" data-label="Inbox"><div class="stage"><div class="win" data-side="inbox">
+<div class="main">
+  <div class="hdr"><span class="ttl">Inbox</span><span class="chip">Tous les projets ▾</span><div class="r"><span class="btn ghost">Filtrer</span></div></div>
+  <div class="body">
+    <div class="group"><b>Needs you</b> 2</div>
+    <div class="row"><span class="mk"><span class="m-need"></span></span><span class="t">agent client · Refonte éditions<span class="why">Asks: garder l'ancien formulaire derrière un flag ?</span></span><span class="meta">4 min</span></div>
+    <div class="row"><span class="mk"><span class="m-fail"></span></span><span class="t">Bug RM · guarantee config<span class="why">Failed: DB RM inaccessible (accès refusé)</span></span><span class="meta">12 min</span></div>
+    <div class="group"><b>Spécialistes</b> 1 suggestion</div>
+    <div class="row tall"><span class="mk" style="margin-top:2px"><svg class="ico" viewBox="0 0 16 16" style="color:var(--red)"><path d="M8 2v2M5 3.5 6 5M11 3.5 10 5M4.5 8h-2M13.5 8h-2M5 12l-1.5 1.5M11 12l1.5 1.5"/><rect x="5" y="5" width="6" height="8" rx="3"/></svg></span>
+      <div style="flex:1;min-width:0"><div>#bugs · Camille : « Le prix ne se met pas à jour quand on change la garantie cyber sur le devis 48213 »</div>
+      <div style="display:flex;gap:6px;margin-top:6px;align-items:center"><span class="chip red">bug · haute</span><span class="chip acc">→ Agent RM</span><span class="chip">client 48213 détecté</span><span class="meta" style="margin-left:4px">règle « #bugs sévérité ≥ haute »</span></div>
+      <div class="acts"><span class="btn pri sm">Investiguer avec l'agent RM</span><span class="btn sm">Charger ce client</span><span class="btn ghost sm">Réassigner ▾</span><span class="btn ghost sm">Ignorer</span></div></div>
+      <span class="meta">8 min</span></div>
+    <div class="group"><b>Réponses à valider</b> 1</div>
+    <div class="row tall"><span class="mk" style="margin-top:2px"><svg class="ico" viewBox="0 0 16 16"><path d="M3 4h10v7H7l-3 2v-2H3z"/></svg></span>
+      <div style="flex:1;min-width:0"><div>Réponse dans #support-insurance · fil de Léa</div>
+      <div class="draft"><div class="lbl">Brouillon · Agent Insurance</div>C'est voulu : depuis la v12, la franchise est recalculée à la date d'effet et pas à la date de devis. Le contrat 7781 est correct. Je te mets le lien vers la règle.</div>
+      <div class="acts"><span class="btn pri sm">Envoyer</span><span class="btn sm">Modifier</span><span class="btn ghost sm">Jeter</span></div></div>
+      <span class="meta">20 min</span></div>
+    <div class="group"><b>Ready to merge</b> 1</div>
+    <div class="row"><span class="mk"><svg class="ico pr" viewBox="0 0 16 16"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V7a2 2 0 0 0-2-2H7.5"/></svg></span><span class="t">Fix wording éditions<span class="why">#809 · checks ok · 1 approbation</span></span><span class="btn sm">Merge…</span></div>
+  </div>
+</div></div></div></section>
+
+<!-- 2 TODAY -->
+<section class="screen" data-s="today" data-label="Today"><div class="stage"><div class="win" data-side="today">
+<div class="main">
+  <div class="hdr"><span class="ttl">Today</span><span class="crumb">lundi 23 novembre · plan de 08:30, rafraîchi à 13:30</span><div class="r"><span class="btn ghost">Replanifier</span></div></div>
+  <div class="today">
+    <h2>Bonjour Bojan</h2><div class="lead">4 h 30 libres aujourd'hui · 2 réunions · 3 reviews t'attendent</div>
+    <div class="grid">
+      <div>
+        <div class="box"><h3><span>Priorités</span><span>5</span></h3>
+          <div class="task"><span class="cb"></span><div><div class="t">Finir le lien broker ↔ agence HubSpot</div><div class="w">Martin attend la PR avant jeudi · INSDIS-2033</div></div><div class="r"><span class="chip">2 h</span><span class="chip"><span class="m-work" style="width:8px;height:8px"></span> mission en cours</span></div></div>
+          <div class="task"><span class="cb"></span><div><div class="t">Répondre à Camille sur le prix du devis 48213</div><div class="w">Bug signalé dans #bugs, investigation RM proposée</div></div><div class="r"><span class="chip">30 min</span><span class="btn sm">Start ▾</span></div></div>
+          <div class="task"><span class="cb"></span><div><div class="t">Relire la PR #812 de Sarah (éditions API)</div><div class="w">Review demandée hier, elle est bloquée</div></div><div class="r"><span class="chip">45 min</span><span class="btn sm">Tester la PR</span></div></div>
+          <div class="task"><span class="cb"></span><div><div class="t">Préparer le point pricing de 16h</div><div class="w">Réunion à 16:00 · doc partagé par Hugo</div></div><div class="r"><span class="chip amber">avant 15:45</span></div></div>
+        </div>
+        <div class="box" style="margin-top:20px"><h3><span>Quick wins · un agent peut les prendre</span><span>3</span></h3>
+          <div class="task"><span class="cb"></span><div><div class="t">Typo dans l'email de renouvellement</div><div class="w">INSDIS-2061 · Quick fix</div></div><div class="r"><span class="btn pri sm">Start</span></div></div>
+          <div class="task"><span class="cb"></span><div><div class="t">Flaky test questionnaire.spec</div><div class="w">3 échecs CI cette semaine</div></div><div class="r"><span class="btn pri sm">Start</span></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="box"><h3><span>Standup</span><span>copier</span></h3>
+          <div class="say"><p style="color:var(--text3);font-size:11.5px">Hier</p><p>J'ai <b>mergé le fix des avenants</b> : les dates d'effet sont bonnes</p><p>J'ai <b>débloqué Sarah</b> sur le schéma éditions</p><p style="color:var(--text3);font-size:11.5px;margin-top:8px">Aujourd'hui</p><p>Je <b>finis le lien HubSpot</b>, Martin attend</p><p style="color:var(--text3);font-size:11.5px;margin-top:8px">Blocages</p><p>Rien</p></div></div>
+        <div class="box" style="margin-top:20px"><h3><span>En attente de</span><span>1</span></h3>
+          <div class="task"><div><div class="t">Validation infra de Martin</div><div class="w">Slack · depuis vendredi</div></div></div></div>
+        <div class="box" style="margin-top:20px"><h3><span>Learn</span><span>Insurance · 4/9</span></h3>
+          <div class="task"><div style="flex:1"><div class="t">Franchises et plafonds</div><div class="w">Leçon 5 · 6 min</div><div class="prog"><i style="width:44%"></i></div></div></div></div>
+      </div>
+    </div>
+  </div>
+</div></div></div></section>
+
+<!-- 3 SPRINT + NEW MISSION -->
+<section class="screen" data-s="sprint" data-label="Sprint + Nouvelle mission"><div class="stage"><div class="win" data-side="sprint">
+<div class="main">
+  <div class="hdr"><span class="ttl">Mon sprint</span><span class="crumb">Cycle 47 · 18 nov → 1 déc · 62 %</span><div class="r"><span class="chip">product ▾</span></div></div>
+  <div class="board">
+    <div class="lane"><h5><span class="pie"></span>Todo <span class="meta">3</span></h5>
+      <div class="card new"><div class="id">INSDIS-2061 · nouveau</div><div class="tt">Typo dans l'email de renouvellement</div><div class="f"><span class="chip">Quick fix</span></div></div>
+      <div class="card"><div class="id">INSDIS-2040</div><div class="tt">Refonte du formulaire éditions</div><div class="f"><span class="chip">Needs planning</span></div></div>
+    </div>
+    <div class="lane"><h5><span class="pie p1"></span>In progress <span class="meta">2</span></h5>
+      <div class="card"><div class="id">INSDIS-2033</div><div class="tt">Lier les membres broker aux agences HubSpot</div><div class="f"><span class="mk"><span class="m-work"></span></span><span class="meta">Feature · agent working</span></div></div>
+    </div>
+    <div class="lane"><h5><span class="pie p2"></span>In review <span class="meta">1</span></h5>
+      <div class="card"><div class="id">INSDIS-2019</div><div class="tt">Wording éditions A</div><div class="f"><svg class="ico pr" viewBox="0 0 16 16"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V7a2 2 0 0 0-2-2H7.5"/></svg><span class="meta">#809 prête</span></div></div>
+    </div>
+    <div class="lane"><h5><span class="pie p3"></span>Done <span class="meta">6</span></h5></div>
+  </div>
+</div>
+<div class="scrim"><div class="sheet">
+  <div class="sh"><div class="id">INSDIS-2040 · Linear · product</div><div class="tt">Refonte du formulaire éditions</div></div>
+  <div class="opt"><span class="radio"></span><div><div class="t">Quick fix</div><div class="d">1 agent · worktree léger · env du main. Prêt en quelques secondes.</div></div></div>
+  <div class="opt"><span class="radio"></span><div><div class="t">Feature</div><div class="d">1 agent · worktree + DB et Redis dédiés · son propre serveur.</div></div></div>
+  <div class="opt on"><span class="radio"></span><div><div class="t">Squad</div><div class="d">Orchestrateur + agents · un worktree par agent · un env de mission partagé.</div><div class="tags"><span class="chip">1 PR par agent, en stack</span><span class="chip">migrations : 1 à la fois</span></div></div></div>
+  <div class="sf"><span class="chip">Suggéré : Needs planning → Squad</span><span class="chip">Opus · high</span><span style="flex:1"></span><span class="btn ghost">Annuler</span><span class="btn pri">Démarrer ↵</span></div>
+</div></div>
+</div></div></section>
+
+<!-- 4 SQUAD -->
+<section class="screen" data-s="squad" data-label="Mission Squad"><div class="stage"><div class="win" data-side="squad">
+<div class="main">
+  <div class="hdr"><span class="ttl">Refonte éditions</span><span class="chip">Squad</span><span class="crumb">INSDIS-2040 · product</span><div class="r"><span class="btn ghost">Brief</span><span class="btn ghost">Artifacts</span><span class="btn">Mark done</span></div></div>
+  <div class="split">
+    <div class="col">
+      <div class="chat">
+        <div class="msg"><div class="who">Orchestrateur</div>J'ai découpé la refonte en 3 tâches. L'agent API est le seul autorisé à modifier le schéma (migration <span class="mono">add_edition_form_v2</span>).
+          <div class="plan"><div><span class="pie p1"></span>API : endpoints éditions v2<span class="meta" style="margin-left:auto">agent API · feat/ed-api</span></div><div><span class="pie p1"></span>Client : nouveau formulaire<span class="meta" style="margin-left:auto">agent client · feat/ed-ui</span></div><div><span class="pie"></span>Tests e2e<span class="meta" style="margin-left:auto">attend API + client</span></div></div></div>
+        <div class="tool"><span class="mk"><span class="m-need"></span></span>L'agent client pose une question, je te la remonte.</div>
+        <div class="msg"><div class="who">Orchestrateur</div>L'agent client demande : on garde l'ancien formulaire derrière un flag pendant la migration ?</div>
+      </div>
+      <div class="composer">Répondre à l'orchestrateur…<div class="ctl"><span class="chip">Opus</span><span class="chip">high</span><span style="flex:1"></span><span class="btn pri sm">↵</span></div></div>
+    </div>
+    <div class="rail">
+      <h4>Agents</h4>
+      <div class="ritem"><span class="mk" style="margin-top:2px"><span class="m-work fill"></span></span><div style="flex:1"><div class="t">API</div><div class="s mono">feat/ed-api</div><div class="s">:4101 · serveur en marche</div></div><span class="btn sm">Ouvrir</span></div>
+      <div class="ritem"><span class="mk" style="margin-top:2px"><span class="m-need"></span></span><div style="flex:1"><div class="t">Client</div><div class="s mono">feat/ed-ui</div><div class="s" style="color:var(--amber)">Asks: garder l'ancien formulaire ?</div></div><span class="btn sm">Répondre</span></div>
+      <div class="ritem"><span class="mk" style="margin-top:2px"><span class="m-work"></span></span><div style="flex:1"><div class="t">Tests</div><div class="s">en attente des tâches 1 et 2</div></div></div>
+      <h4>Env de mission</h4>
+      <div class="kv"><span>DB</span><span class="mono">wt_refonte_editions</span><span>Redis</span><span>db 4</span><span>Migrations</span><span>agent API seulement</span><span>Source</span><span class="mono">.worktrees/refonte-env</span></div>
+      <div style="padding:0 16px 10px"><span class="btn sm">Isoler un agent…</span></div>
+      <h4>Pull requests · stack</h4>
+      <div class="ritem"><svg class="ico" viewBox="0 0 16 16" style="color:var(--text3);margin-top:2px"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V7a2 2 0 0 0-2-2H7.5"/></svg><div><div class="t">#812 éditions API</div><div class="s">checks en cours</div></div></div>
+      <div class="ritem"><svg class="ico" viewBox="0 0 16 16" style="color:var(--text3);margin-top:2px"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V7a2 2 0 0 0-2-2H7.5"/></svg><div><div class="t">éditions UI</div><div class="s">pas encore poussée · au-dessus de #812</div></div></div>
+    </div>
+  </div>
+</div></div></div></section>
+
+<!-- 5 CHAT -->
+<section class="screen" data-s="chat" data-label="Chat Feature"><div class="stage"><div class="win" data-side="none">
+<div class="main">
+  <div class="hdr"><span class="ttl">Lier les membres broker aux agences HubSpot</span><span class="chip">Feature</span><span class="crumb mono">feat/hubspot-agency</span><div class="r"><span class="btn ghost">Open in ▾</span></div></div>
+  <div class="prbar"><svg class="ico" viewBox="0 0 16 16" style="color:var(--text2)"><circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V7a2 2 0 0 0-2-2H7.5"/></svg><b>#811</b><span class="chip red">2 checks en échec</span><span class="chip">3 commentaires</span><span class="chip">main a avancé de 4 commits</span><span style="flex:1"></span><span class="btn sm">Fix CI</span><span class="btn sm">Resolve comments</span><span class="btn sm">Rebase on main</span><span class="btn sm">Merge…</span></div>
+  <div class="split">
+    <div class="col">
+      <div class="chat">
+        <div class="msg user"><div class="bub">Ajoute le lien broker ↔ agence et expose-le dans l'API partenaires.</div></div>
+        <div class="msg"><div class="who">Agent</div>C'est fait : nouvelle relation <span class="mono">broker_agency</span>, sync HubSpot dans <span class="mono">hubspot-sync.service.ts</span>, et deux tests. J'ai poussé la PR #811.
+          <div class="tool">✓ setup : worktree, DB wt_hubspot_agency, ports :4102 (48 s)</div><div class="tool">✓ checks locaux : lint, tests api (affected)</div></div>
+      </div>
+      <div class="composer">Message, ou commentaires du diff en attente (1)…<div class="ctl"><span class="chip">Build</span><span class="chip">Opus</span><span style="flex:1"></span><span class="btn sm">Envoyer 1 commentaire</span><span class="btn pri sm">↵</span></div></div>
+    </div>
+    <div class="rail" style="width:430px">
+      <div class="tabs"><span class="on">Changes 3</span><span>Terminal</span><span>Run</span><span>Links</span></div>
+      <div class="file"><span class="st">M</span><span class="mono" style="flex:1">api/hubspot-sync.service.ts</span><span class="add">+42</span><span class="del">−6</span></div>
+      <div class="diff">
+        <div class="dl"><span class="n">88</span><span>  const agency = await this.agencies.find(id);</span></div>
+        <div class="dl a sel"><span class="n">89</span><span>+ const members = agency.brokers.map(toMember);</span></div>
+        <div class="dl a sel"><span class="n">90</span><span>+ await this.hubspot.link(members);</span></div>
+        <div class="cm"><b>Toi</b> · lignes 89–90<br>Gère le cas où <span class="mono">agency</span> est null, et fais le link en batch de 100.<div class="acts"><span class="btn sm">Ajouter à l'envoi</span><span class="btn ghost sm">Annuler</span></div></div>
+        <div class="dl a"><span class="n">91</span><span>+ this.logger.info({ count: members.length });</span></div>
+      </div>
+      <div class="file"><span class="st">A</span><span class="mono" style="flex:1">api/broker-agency.entity.ts</span><span class="add">+31</span></div>
+      <div class="file"><span class="st">A</span><span class="mono" style="flex:1">api/hubspot-sync.spec.ts</span><span class="add">+80</span></div>
+      <div style="border-top:1px solid var(--line);margin-top:10px;padding:10px 14px;display:flex;align-items:center;gap:8px"><span class="dot"></span><span>Serveur :4102</span><span class="meta mono">hubspot-agency.stoik.localhost</span><span style="flex:1"></span><span class="btn sm">Stop</span></div>
+    </div>
+  </div>
+</div></div></div></section>
+
+<!-- 6 REVIEWS -->
+<section class="screen" data-s="reviews" data-label="Reviews"><div class="stage"><div class="win" data-side="reviews">
+<div class="main">
+  <div class="hdr"><span class="ttl">Reviews</span><span class="crumb">PR qui attendent ta review</span><div class="r"><span class="chip">stoikio/product ▾</span></div></div>
+  <div class="body">
+    <div class="group"><b>En attente de toi</b> 3</div>
+    <div class="row tall"><span class="mk" style="margin-top:2px"><span class="m-need"></span></span><div style="flex:1;min-width:0"><div><b>#812</b> Éditions API v2 <span class="why">Sarah · depuis hier · +640 −120 · elle est bloquée</span></div>
+      <div class="draft"><div class="lbl">Pré-review · agent</div>Migration ajoutée sans down. <span class="mono">EditionFormV2Dto</span> accepte des champs inconnus. Les tests couvrent le happy path seulement. À tester : la création d'un devis avec une édition existante.</div>
+      <div class="acts"><span class="btn pri sm">Tester cette PR</span><span class="btn sm">Ouvrir sur GitHub</span></div></div></div>
+    <div class="row"><span class="mk"><span class="m-work"></span></span><span class="t"><b>#806</b> Questionnaire RM : guarantee config<span class="why">Hugo · 2 j · checks ok</span></span><span class="btn sm">Pré-review</span><span class="btn sm">Tester</span></div>
+    <div class="row"><span class="mk"><span class="m-work"></span></span><span class="t"><b>#799</b> Renouvellements : relance J-30<span class="why">Inès · 3 j · 1 approbation</span></span><span class="btn sm">Pré-review</span><span class="btn sm">Tester</span></div>
+    <div class="group"><b>En test</b> 1</div>
+    <div class="row"><span class="dot"></span><span class="t"><b>#812</b> en cours de test<span class="why mono">pr-812.stoik.localhost · :4103 · DB dédiée</span></span><span class="btn sm">Ouvrir</span><span class="btn ghost sm">Arrêter et nettoyer</span></div>
+  </div>
+</div></div></div></section>
+
+<script>
+const screens=[...document.querySelectorAll('.screen')];
+const tabs=document.getElementById('tabs');
+tabs.innerHTML=screens.map(s=>`<button data-s="${s.dataset.s}">${s.dataset.label}</button>`).join(' ');
+const tpl=document.getElementById('sidebar');
+document.querySelectorAll('.win').forEach(w=>{
+  if(w.dataset.side==='none'){w.prepend(tpl.content.cloneNode(true));w.querySelector('.side').querySelectorAll('.nav a').forEach(a=>a.classList.remove('on'));return;}
+  w.prepend(tpl.content.cloneNode(true));
+  const k=w.dataset.side;w.querySelectorAll('[data-k]').forEach(a=>{if(a.dataset.k===k)a.classList.add(a.classList.contains('mi')?'on':'on')});
+  if(k==='squad')w.querySelector('.mi[data-k="squad"]').style.background='var(--sel)';
+});
+function go(s){screens.forEach(x=>x.classList.toggle('on',x.dataset.s===s));tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.s===s));try{localStorage.setItem('mk-tab',s)}catch(e){}}
+tabs.querySelectorAll('button').forEach(b=>b.onclick=()=>go(b.dataset.s));
+let t='light';try{t=localStorage.getItem('mk-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')}catch(e){}
+const th=document.getElementById('th');
+function setT(v){t=v;document.documentElement.dataset.theme=v;th.textContent=v==='dark'?'Clair':'Sombre';try{localStorage.setItem('mk-theme',v)}catch(e){}}
+th.onclick=()=>setT(t==='dark'?'light':'dark');setT(t);
+let first='inbox';try{first=localStorage.getItem('mk-tab')||'inbox'}catch(e){}
+window.go=go;window.setT=setT;go(first);
+</script>
+</body>
+</html>

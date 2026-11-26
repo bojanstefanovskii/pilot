@@ -580,8 +580,30 @@ required. See [the exploration contract](docs/code-exploration.md) for limits an
 
 Isolated Build workspaces keep file edits out of your own checkout. For jj projects, sessions use
 separate working copies of a shared repository. **History and bookmarks are shared**, so agents must keep
-rewrites and pushes scoped to their own task. Git-only projects use private clones. Direct-checkout mode
+rewrites and pushes scoped to their own task. Git-only projects use private clones, or real Git worktrees
+(named `pilot-<id>`) when project scripts rely on `git worktree list`. Direct-checkout mode
 is also available, but edits there affect your checkout.
+
+Projects can keep personal scripts in Pilot's settings: **Setup** runs in each new workspace before the first
+turn, **Checks** run after a turn that changed files and send failures back to the agent, and **Teardown** runs
+before an archived chat's worktree is removed. Worktrees with uncommitted changes, or commits on no branch, are kept.
+A Build chat is a **Feature** (full Setup) or a **Quick fix** (the lighter Quick fix setup). In a mission, later agents
+run the Squad agent setup against the first agent's environment (shared database and services); **Isolate** gives one
+its own. An Ask chat can investigate a bug read-only, with a domain specialist skill, and **Fix it** starts a Build chat
+from its conclusion.
+
+Chats with an open PR offer **Resolve comments**, **Rebase** and **Fix CI**, which ask the agent, and **Resolve
+threads…**, which resolves on GitHub only the threads you check. Right-click a diff line to send the agent a comment
+on it. Chats started from Slack can **Reply in Slack** with a draft you edit before it is sent. When pi has no dedicated Slack login but the Stoik unified MCP
+is signed in, Slack tracking goes through unified-mcp (`PILOT_SLACK_SOURCE=unified|slack` forces one); its posts land
+as a draft in your Slack DMs unless "send immediately" is on there.
+
+The sidebar also opens **Today** (a daily plan written by three weekday routines through the `today_write` tool),
+**Sprint** (the current Linear cycle as columns, with Start), **Reviews** (PRs waiting on you, with Test this PR) and
+**Routines** (schedules, including cron routines created with Repeat in Send later). **Chats** holds free chats for
+questions, bugs and small requests: Ask reads the project's current checkout, Build edits it in place (no worktree or
+clone), or either runs in the home folder. They stay out of the Features and Quick fixes boards.
+The Inbox lists chats that need you, PRs ready to merge and Slack; Linear tickets live in Sprint only.
 
 New opted-in mission builder workspaces also record internal durable jj creator attribution.
 This does not adopt existing work. New eligible builder bindings also queue exact committed layers for
@@ -956,7 +978,7 @@ pi MCP servers named `linear` and `slack` and their existing OAuth sign-in, not 
 Configure sources in project settings. Tracking is not a blanket promise of autonomous fixes or replies.
 Slack triage has a Refresh button in its toolbar to sync new messages on demand. It is disabled while syncing.
 
-Linear sub-issues appear under their parent in the Inbox, the Overview's current cycle and the full list,
+Linear sub-issues appear under their parent in Sprint, the Overview's current cycle and the full list,
 with a collapsible "N sub-issues" count on the parent, one level deep. When the parent is not one of your
 tracked issues, its identifier, title and link (read with `get_issue`, cached and bounded) head the group
 as a read-only row. Starting work on a sub-issue quotes its parent's identifier and title.
@@ -989,7 +1011,7 @@ Linear size classification suggests Quick fix, Needs planning or Unknown from a 
 It runs once per issue update, at most eight attempts per poll and 200 per UTC day across projects, with the
 cheapest scoped model and no tools or thinking. Descriptions are transient; failed attempts remain Unknown
 until the issue changes. User size corrections survive sync and feed the shared guide. This never auto-starts
-work. Open Linear rows in the Inbox, the Overview's current cycle and the full list show Quick fix or Needs
+work. Open Linear rows in Sprint, the Overview's current cycle and the full list show Quick fix or Needs
 planning as a chip, which also corrects the size (or use the row's Size menu). Needs planning rows make
 Start mission the hover action, marked Suggested; others keep Start chat. Chats started from a sized ticket
 are told its size and asked to suggest a mission, not start one, if the work needs planning.

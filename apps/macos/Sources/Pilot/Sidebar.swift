@@ -6,7 +6,7 @@ import SwiftUI
 /// activity order. The scope switcher at the top lists every project (the default) or focuses on one, which then shows
 /// only that project's missions and chats, without project names. Project folders are headings in the
 /// scope switcher and on Home, never a sidebar grouping. Search appears on ⌘F, and the footer only when the
-/// connection to pilotd needs attention. Each chat's state is its dithered corner (`DitherCorner`).
+/// connection to pilotd needs attention. Each chat's state is its status mark (`statusMark`).
 struct SessionSidebar: View {
     @Environment(\.hostViewContext) private var hostContext
     @ObservedObject var model: AppModel
@@ -40,20 +40,24 @@ struct SessionSidebar: View {
             guard let key else { return }
             model.navigate(.session, id: key)
         })) {
-            if model.localHost != nil { unifiedMissions }
-            if !hosts.offlineHosts.isEmpty {
-                unifiedRows
-            } else if let focused {
-                if model.localHost == nil { missionsSection(visible: visible, searching: searching, projectId: focused.id) }
-                urgencyGroups(visible.filter { $0.projectId == focused.id }, searching: searching,
-                              recentListId: focused.id, hasArchivedMatches: !archived.isEmpty)
-                archivedMatches(archived)
-            } else {
-                if model.localHost == nil { missionsSection(visible: visible, searching: searching) }
-                let names = Dictionary(client.projects.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-                urgencyGroups(visible, searching: searching, recentListId: Self.recentListId,
-                              hasArchivedMatches: !archived.isEmpty, projectNames: names)
-                archivedMatches(archived, projectNames: names)
+            // The sidebar is navigation: chats live in Inbox and the Missions, Features and Quick fixes pages.
+            // Search (⌘F) still lists matching chats here.
+            if searching {
+                if model.localHost != nil { unifiedMissions }
+                if !hosts.offlineHosts.isEmpty {
+                    unifiedRows
+                } else if let focused {
+                    if model.localHost == nil { missionsSection(visible: visible, searching: searching, projectId: focused.id) }
+                    urgencyGroups(visible.filter { $0.projectId == focused.id }, searching: searching,
+                                  recentListId: focused.id, hasArchivedMatches: !archived.isEmpty)
+                    archivedMatches(archived)
+                } else {
+                    if model.localHost == nil { missionsSection(visible: visible, searching: searching) }
+                    let names = Dictionary(client.projects.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+                    urgencyGroups(visible, searching: searching, recentListId: Self.recentListId,
+                                  hasArchivedMatches: !archived.isEmpty, projectNames: names)
+                    archivedMatches(archived, projectNames: names)
+                }
             }
         }
         .listStyle(.sidebar)
@@ -476,7 +480,7 @@ private struct SidebarSectionHeader: View {
 /// One chat: its title, then one `RowLine` with its project (when the list is not grouped by project), what kind
 /// of chat it is, its reason, PRs, mission and branch. An active coordinator's second line says "Coordinator" and
 /// its state instead. The control chat leads its title with its own symbol, says "All projects" where others name
-/// their project, and offers no pin, archive or mission actions. The dithered corner carries the chat's state, so
+/// their project, and offers no pin, archive or mission actions. The status mark carries the chat's state, so
 /// the row needs no status column. Time and
 /// pin marks show under the pointer, in space the row always reserves, so hovering never reflows the title; the
 /// corner recedes to make room for them. The mission label opens its mission. Diff counts stay out of the row and
@@ -564,7 +568,7 @@ struct SessionRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
-        .ditherCorner(disconnected ? .readyToMerge : signal, background: session.isWaitingOnJobs, monochrome: disconnected)
+        .statusMark(disconnected ? .readyToMerge : signal, background: session.isWaitingOnJobs, monochrome: disconnected)
         .onHover { hovered = $0 }
         .onPreferenceChange(SessionRepositoryHelpKey.self) { repositoryHelp = $0 }
         .animation(Theme.Motion.quick, value: hovered)

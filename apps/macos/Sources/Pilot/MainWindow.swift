@@ -59,7 +59,20 @@ struct MainWindow: View {
         } detail: {
             Group {
                 if model.showingUsage {
-                    UsageDashboardPage(hosts: hosts)
+                    switch model.workflowPage {
+                    case .today: TodayView(model: model)
+                    case .chats: ChatsPage(model: model, client: model.client)
+                    case .sprint: SprintBoardView(model: model, client: model.client)
+                    case .reviews: ReviewsView(model: model, client: model.client)
+                    case .routines: RoutinesView(model: model, client: model.client)
+                    case .database: DatabasePage(model: model, client: model.client)
+                    case .missions: WorkBoardView(kind: .missions, model: model, client: model.client)
+                    case .pullRequests: PullRequestsPage(model: model, client: model.client)
+                    case .notes: NotesPage(model: model, client: model.client)
+                    case .quickFixes: WorkBoardView(kind: .quickFixes, model: model, client: model.client)
+                    case .features: WorkBoardView(kind: .features, model: model, client: model.client)
+                    case nil: UsageDashboardPage(hosts: hosts)
+                    }
                 } else if let id = model.selectedMissionId, let ref = model.resourceRef(id, kind: .mission) {
                     LogicalMissionDestination(reference: ref, model: model, registry: model.missionRegistry)
                         .id(ref.storageKey)

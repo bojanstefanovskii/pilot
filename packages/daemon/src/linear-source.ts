@@ -137,7 +137,13 @@ const DETAIL_FIELDS = [
 	"gitBranchName",
 	"parentId",
 	"updatedAt",
+	// For the sprint list: grouping by project, label chips and the date column.
+	"project",
+	"labels",
+	"createdAt",
 ];
+/** Bumped when DETAIL_FIELDS grows, so the next poll refetches every issue instead of only updated ones. */
+const DETAIL_FIELDS_VERSION = 2;
 /** Sub-issue parents: headers kept per project in the poll cursor, at most this many. */
 const MAX_PARENTS = 50;
 /** get_issue calls for parent headers per poll: new parents first, then the oldest on a full refresh. */
@@ -160,6 +166,7 @@ export async function pollLinear(context: SourcePollContext): Promise<SourcePoll
 			: undefined;
 	const full =
 		previous?.cycleId !== (cycle?.id ?? null) ||
+		previous?.fieldsVersion !== DETAIL_FIELDS_VERSION ||
 		typeof previous?.refreshedAt !== "number" ||
 		startedAt - previous.refreshedAt >= FULL_REFRESH_MS;
 	// Reconcile membership on every poll: updatedAt alone cannot remove reassigned/moved issues.
@@ -180,6 +187,7 @@ export async function pollLinear(context: SourcePollContext): Promise<SourcePoll
 			// Overlap boundary timestamps. Advance only when every bounded page succeeded.
 			updatedAt: new Date(startedAt - 1000).toISOString(),
 			refreshedAt: full ? startedAt : previous!.refreshedAt!,
+			fieldsVersion: DETAIL_FIELDS_VERSION,
 			...(Object.keys(parents).length ? { parents } : {}),
 		},
 		linear: cycle
@@ -445,6 +453,7 @@ function normalize(issue: ObjectJson, cycleId?: string): TrackedInput {
 			teamId: string(issue.teamId, 200),
 			gitBranchName: issue.gitBranchName === null ? null : string(issue.gitBranchName, 500),
 			...(parentId ? { parentId } : {}),
+			...sprintFields(issue),
 		},
 	};
 }
@@ -606,4 +615,34 @@ function stateType(issue: ObjectJson): string {
 	const type = string(issue.statusType, 100);
 	if (!TYPES.has(type)) throw new Error("Unknown Linear state type");
 	return type;
+}
+
+/** Optional display fields; a malformed or missing value is dropped, never fatal to the sync. */
+export function sprintFields(issue: ObjectJson): ObjectJson {
+	const fields: ObjectJson = {};
+	const project = issue.project;
+	const projectName =
+		typeof project === "string"
+			? project
+			: project && typeof project === "object" && !Array.isArray(project) && typeof project.name === "string"
+				? project.name
+				: undefined;
+	if (projectName?.trim()) fields.project = projectName.trim().slice(0, 200);
+	if (Array.isArray(issue.labels)) {
+		const labels = issue.labels
+			.map((label) =>
+				typeof label === "string"
+					? label
+					: label && typeof label === "object" && !Array.isArray(label) && typeof label.name === "string"
+						? label.name
+						: undefined,
+			)
+			.filter((label): label is string => !!label?.trim())
+			.slice(0, 10)
+			.map((label) => label.trim().slice(0, 80));
+		if (labels.length) fields.labels = labels;
+	}
+	if (typeof issue.createdAt === "string" && Number.isFinite(Date.parse(issue.createdAt)))
+		fields.createdAt = Date.parse(issue.createdAt);
+	return fields;
 }

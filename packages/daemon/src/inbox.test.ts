@@ -158,21 +158,19 @@ test("GET /api/inbox and the sidebar counts follow sources, scope and hidden lab
 		slack("C1/1.000002", "low", "Product", 2),
 	]);
 	const inbox = await get<Inbox>("/inbox");
-	assert.deepEqual(
-		inbox.linear?.items.map((item) => item.externalId),
-		["A-1"],
-	);
+	// Linear tickets live on the Sprint page, not in the Inbox or its badge.
+	assert.equal(inbox.linear, undefined);
 	assert.equal(inbox.slack?.total, 1);
 	assert.deepEqual(inbox.slack?.hidden, [{ label: "Product", count: 1 }]);
 	assert.deepEqual((await get<ProjectDashboardCounts>("/dashboard/counts")).projects[project.id], {
 		working: 0,
 		needsYou: 0,
-		tracked: 2,
+		tracked: 1,
 	});
 	assert.equal((await fetch(`${root}/inbox?limit=0`)).status, 400);
 	assert.equal((await fetch(`${root}/inbox?projectId=missing`)).status, 404);
 
-	// Showing the label again counts its messages; removing the team drops Linear from the Inbox.
+	// Showing the label again counts its messages.
 	await projects.update(project.id, {
 		tracking: { slackChannels: ["C1"], slackLabels: [{ ...labels[0]!, effect: "none" }] },
 	});

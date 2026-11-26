@@ -12,6 +12,21 @@ struct InboxPage: View {
     @ObservedObject private var hosts = AppModel.shared.hosts
     @StateObject private var inbox = InboxModel()
     @StateObject private var actions = TrackedItemActions()
+    @State private var syncing = false
+
+    /// Polls every configured Linear and Slack source in scope now, then reloads the Inbox.
+    private func syncAll(scope: Project?) {
+        let sources = client.trackingSources.filter { $0.configured && (scope == nil || $0.projectId == scope?.id) }
+        guard !sources.isEmpty else { return inbox.reload() }
+        syncing = true
+        Task {
+            defer { syncing = false }
+            await withTaskGroup(of: Void.self) { group in
+                for source in sources { group.addTask { _ = try? await client.pollSource(source.id) } }
+            }
+            inbox.reload()
+        }
+    }
 
     var body: some View {
         let scope = client.project(model.inboxProjectId)
@@ -25,6 +40,13 @@ struct InboxPage: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     InboxProjectFilter(selection: $model.inboxProjectId, projects: client.projects, scope: scope)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { syncAll(scope: scope) } label: {
+                        if syncing { ProgressView().controlSize(.small) } else { PilotSymbol(PilotIcon.refresh, context: .toolbar) }
+                    }
+                    .disabled(syncing)
+                    .help("Sync Linear and Slack now\(scope.map { " for \($0.name)" } ?? " for every project")")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -303,22 +325,15 @@ final class InboxModel: ObservableObject {
     }
 }
 
-/// An empty Inbox: a wide dithered coast (`DitherScene`) dissolving into the page, with one quiet sentence at
-/// its foot.
+/// An empty Inbox: one quiet sentence, no illustration.
 private struct InboxClearState: View {
     let message: String
 
     var body: some View {
         VStack(spacing: 6) {
-            DitherScene()
-                .frame(height: 260)
-                .frame(maxWidth: .infinity)
-                .clipShape(UnevenRoundedRectangle(topLeadingRadius: Theme.Radius.card, topTrailingRadius: Theme.Radius.card))
             Text("Nothing is waiting on you").font(.pilot(.headline, weight: .semibold))
                 .foregroundStyle(Theme.foreground)
-                .padding(.top, -28)
-                .shadow(color: Theme.halo, radius: 6)
-                .shadow(color: Theme.halo, radius: 14)
+                .padding(.top, 48)
             Text(message).font(.pilot(.label)).foregroundStyle(Theme.mutedForeground)
                 .multilineTextAlignment(.center).frame(maxWidth: 340)
                 .fixedSize(horizontal: false, vertical: true)

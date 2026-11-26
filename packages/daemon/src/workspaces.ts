@@ -22,6 +22,8 @@ export interface Workspace {
 	upstream?: string;
 	/** Colocated jj repository (the source project uses jj). */
 	jj: boolean;
+	/** A `git worktree` of the source repository rather than a private clone. */
+	worktree?: true;
 }
 
 export type Runner = (
@@ -435,4 +437,136 @@ export async function dissociateWorkspace(path: string, providedRunner: Runner =
 	}
 	// Refs kept moving. Keep borrowing, which is always correct, and try again later.
 	return false;
+}
+
+/**
+ * Directory name of a session's Git worktree. Unique per chat because project scripts commonly derive
+ * names from it (a database, a dev URL), so every worktree must not be called `workspace`.
+ */
+export function worktreeDirectoryName(sessionId: string): string {
+	return `pilot-${sessionId.replace(/-/g, "").slice(0, 8).toLowerCase()}`;
+}
+
+/**
+ * Add a real `git worktree` of `source` at `destination`, detached at the selected origin branch or the default
+ * base. Unlike {@link createWorkspace}, the worktree shares the source's repository, refs and remotes, so scripts
+ * that rely on `git worktree list` (port slots, per-worktree databases) see it as a sibling of the main checkout.
+ */
+export async function createGitWorktree(
+	source: string,
+	destination: string,
+	providedRunner: Runner = run,
+	signal?: AbortSignal,
+	baseBranch?: string,
+): Promise<Workspace> {
+	const runner: Runner = (file, args, cwd, timeoutMs) => {
+		signal?.throwIfAborted();
+		return providedRunner(file, args, cwd, timeoutMs, signal);
+	};
+	if (baseBranch !== undefined) await validateBaseBranch(baseBranch, source, runner);
+	if ((await attempt(runner, "git", ["rev-parse", "--is-inside-work-tree"], source)) !== "true")
+		throw new Error(`Project is not a git repository: ${source}`);
+	if (existsSync(join(source, ".jj"))) throw new Error("Git worktree workspaces need a project without jj");
+	const upstream = await attempt(runner, "git", ["remote", "get-url", "origin"], source);
+	if (baseBranch !== undefined && !upstream) throw new Error("Cannot select baseBranch: project has no origin remote");
+	let base: string | undefined;
+	if (baseBranch !== undefined) {
+		try {
+			await runner(
+				"git",
+				[
+					...noMaintenance,
+					"fetch",
+					"--quiet",
+					"--no-tags",
+					"origin",
+					`+refs/heads/${baseBranch}:refs/remotes/origin/${baseBranch}`,
+				],
+				source,
+			);
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			throw new Error(`Origin branch unavailable: ${baseBranch}: ${reason}${authenticationHint(reason)}`);
+		}
+		base = `origin/${baseBranch}`;
+	} else if (upstream) {
+		// Offline is fine: the source's own view of origin is the fallback.
+		await attempt(runner, "git", [...noMaintenance, "fetch", "--quiet", "origin"], source);
+		const head = await attempt(
+			runner,
+			"git",
+			["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+			source,
+		);
+		for (const candidate of [head, "origin/main", "origin/master"]) {
+			if (
+				candidate &&
+				(await attempt(runner, "git", ["rev-parse", "--verify", "--quiet", `${candidate}^{commit}`], source))
+			) {
+				base = candidate;
+				break;
+			}
+		}
+	}
+	base ??= await runner("git", ["rev-parse", "--verify", "HEAD"], source);
+	await mkdir(dirname(destination), { recursive: true });
+	// A large checkout can take minutes; the project's setup script is not part of this.
+	await runner(
+		"git",
+		[...noMaintenance, "worktree", "add", "--quiet", "--detach", destination, base],
+		source,
+		15 * 60_000,
+	);
+	await copyLocalConfigs(source, destination, runner);
+	signal?.throwIfAborted();
+	return { path: destination, base, ...(upstream ? { upstream } : {}), jj: false, worktree: true };
+}
+
+/**
+ * Why a worktree cannot be removed without losing work, or the ref to recreate it from: its branch, or the
+ * detached commit when another branch already contains it.
+ */
+export async function worktreeRemovalCheck(
+	path: string,
+	runner: Runner = run,
+): Promise<{ ref: string } | { blocked: string }> {
+	if ((await runner("git", ["status", "--porcelain"], path, 30_000)).trim())
+		return { blocked: "The worktree has uncommitted changes" };
+	const branch = (await runner("git", ["branch", "--show-current"], path, 10_000)).trim();
+	if (branch) return { ref: branch };
+	const head = (await runner("git", ["rev-parse", "--verify", "HEAD"], path, 10_000)).trim();
+	const containing = await runner("git", ["branch", "--all", "--contains", head, "--format=%(refname)"], path, 30_000);
+	return containing.trim() ? { ref: head } : { blocked: "The worktree has commits on no branch" };
+}
+
+/** Remove a worktree and its registration in the source repository. Missing directories are fine. */
+export async function removeGitWorktree(source: string, path: string, runner: Runner = run): Promise<void> {
+	if (existsSync(path)) {
+		try {
+			await runner("git", ["worktree", "remove", "--force", "--force", path], source, 5 * 60_000);
+		} catch {
+			await rm(path, { recursive: true, force: true });
+		}
+	}
+	await attempt(runner, "git", ["worktree", "prune"], source);
+}
+
+/** Recreate a removed worktree at the same path from its branch or commit. */
+export async function restoreGitWorktree(
+	source: string,
+	path: string,
+	ref: string,
+	runner: Runner = run,
+): Promise<void> {
+	await attempt(runner, "git", ["worktree", "prune"], source);
+	const isBranch =
+		(await attempt(runner, "git", ["show-ref", "--verify", "--quiet", `refs/heads/${ref}`], source)) !== undefined;
+	await mkdir(dirname(path), { recursive: true });
+	await runner(
+		"git",
+		[...noMaintenance, "worktree", "add", "--quiet", ...(isBranch ? [path, ref] : ["--detach", path, ref])],
+		source,
+		15 * 60_000,
+	);
+	await copyLocalConfigs(source, path, runner);
 }

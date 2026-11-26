@@ -53,6 +53,39 @@ public enum DiagnosticScope: String, Codable, Hashable, Sendable {
 public enum WorkspaceMode: String, Codable, Hashable, Sendable {
     case clone
     case direct
+    /// A real `git worktree` of the project, for project scripts that rely on `git worktree list`.
+    case worktree
+
+    /// The chat works in its own copy rather than in the project folder.
+    public var isIsolated: Bool { self != .direct }
+
+    public var title: String {
+        switch self {
+        case .clone: return "Isolated workspace"
+        case .worktree: return "Git worktree"
+        case .direct: return "Current checkout"
+        }
+    }
+
+    /// Short form for a composer chip.
+    public var chipTitle: String { self == .direct ? "Checkout" : title }
+
+    /// A project's default, as its page lists it.
+    public var projectTitle: String {
+        switch self {
+        case .clone: return "Isolated workspaces"
+        case .worktree: return "Git worktrees"
+        case .direct: return "Current checkout"
+        }
+    }
+}
+
+/// Kind of work a Build chat does; selects the project's setup profile. Mirrors `WorkKind`.
+public enum WorkKind: String, Codable, Hashable, Sendable, CaseIterable {
+    case quick
+    case feature
+
+    public var title: String { self == .quick ? "Quick fix" : "Feature" }
 }
 
 public enum WorkspaceStorage: String, Codable, Sendable {
@@ -131,6 +164,15 @@ public struct SessionSummary: Codable, Identifiable, Equatable, Hashable, Sendab
     public var trackedSource: SessionTrackedSource? = nil
     /// Worker startup failed. Retry reloads it without replacing queued messages or history.
     public let canRetryStartup: Bool?
+    /// The last run of the project's setup scripts in this chat's workspace. Omitted when none, or by older daemons.
+    public var kind: WorkKind? = nil
+    /// Squad agent sharing the environment set up in this other workspace.
+    public var missionEnv: String? = nil
+    /// The mission's other agents share this workspace's environment.
+    public var missionEnvOwner: Bool? = nil
+    public var setup: WorkspaceScriptRun? = nil
+    /// The last run of the project's checks after a turn that changed files. Omitted when none.
+    public var checks: WorkspaceScriptRun? = nil
     /// Live jobs owned by this worker. Nil when none.
     public let runningJobs: [SessionJob]?
     /// Live user-only attention, independent of the kernel state and outcome.
@@ -185,6 +227,7 @@ public struct SessionSummary: Codable, Identifiable, Equatable, Hashable, Sendab
         if workspaceStorage == .shared { return "Shared jj workspace" }
         switch workspace {
         case .clone: return "Isolated workspace"
+        case .worktree: return "Git worktree"
         case .direct: return "Current checkout"
         case nil: return branch == nil ? "Build workspace" : "Isolated workspace"
         }
@@ -193,7 +236,7 @@ public struct SessionSummary: Codable, Identifiable, Equatable, Hashable, Sendab
         if isMissionCoordinator { return "Current main" }
         if isAsk { return sourceBranch.map { "origin/\($0)" } ?? "Current checkout" }
         return branch ?? sourceBranch.map { "origin/\($0)" }
-            ?? (workspace == .clone ? "Default base" : workspace == .direct ? "Current checkout" : "Source unavailable")
+            ?? (workspace?.isIsolated == true ? "Default base" : workspace == .direct ? "Current checkout" : "Source unavailable")
     }
     public var workspaceHelp: String {
         if isMissionCoordinator {
@@ -480,12 +523,14 @@ public struct Project: Codable, Identifiable, Equatable, Hashable, Sendable {
     public let name: String
     public let path: String
     public let model: String?
-    /// "clone" (default, nil) or "direct".
+    /// "clone" (default, nil), "worktree" or "direct".
     public let workspace: String?
     /// Whether publishing requires a pull request. Omitted by older daemons; defaults to true.
     public let requirePullRequest: Bool?
     public let tracking: ProjectTrackingConfig?
     public let trackingGeneration: String?
+    /// Personal workspace scripts (setup, run, checks). Omitted when none, or by older daemons.
+    public let scripts: WorkspaceScripts?
     /// Environment profile. Edited through PUT /api/projects/:id/environment only.
     public let environment: ProjectEnvironment?
     /// This host's own environment layer, never synced. Edited through PUT /api/projects/:id/environment/override.
@@ -493,14 +538,17 @@ public struct Project: Codable, Identifiable, Equatable, Hashable, Sendable {
     public let createdAt: Double
 
     public var usesPrivateClones: Bool { workspace != "direct" }
+    /// The workspace new Build chats get by default.
+    public var defaultWorkspaceMode: WorkspaceMode { WorkspaceMode(rawValue: workspace ?? "") ?? .clone }
     public var effectiveRequirePullRequest: Bool { requirePullRequest ?? true }
 
     public init(
         id: String, name: String, path: String, model: String? = nil, workspace: String? = nil,
         requirePullRequest: Bool? = nil, tracking: ProjectTrackingConfig? = nil, trackingGeneration: String? = nil,
         environment: ProjectEnvironment? = nil, environmentOverride: ProjectEnvironmentOverride? = nil,
-        createdAt: Double
+        scripts: WorkspaceScripts? = nil, createdAt: Double
     ) {
+        self.scripts = scripts
         self.id = id
         self.name = name
         self.path = path
@@ -515,7 +563,7 @@ public struct Project: Codable, Identifiable, Equatable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, path, model, workspace, requirePullRequest, tracking, trackingGeneration, environment, environmentOverride, createdAt
+        case id, name, path, model, workspace, requirePullRequest, tracking, trackingGeneration, environment, environmentOverride, scripts, createdAt
     }
 
     /// A profile from a newer daemon that this app cannot read never hides the project itself.
@@ -529,6 +577,7 @@ public struct Project: Codable, Identifiable, Equatable, Hashable, Sendable {
         requirePullRequest = try container.decodeIfPresent(Bool.self, forKey: .requirePullRequest)
         tracking = try container.decodeIfPresent(ProjectTrackingConfig.self, forKey: .tracking)
         trackingGeneration = try container.decodeIfPresent(String.self, forKey: .trackingGeneration)
+        scripts = try? container.decodeIfPresent(WorkspaceScripts.self, forKey: .scripts)
         environment = try? container.decodeIfPresent(ProjectEnvironment.self, forKey: .environment)
         environmentOverride = try? container.decodeIfPresent(ProjectEnvironmentOverride.self, forKey: .environmentOverride)
         createdAt = try container.decode(Double.self, forKey: .createdAt)
@@ -564,11 +613,14 @@ public struct ProjectRequest: Codable, Sendable {
     public var workspace: String?
     public var requirePullRequest: Bool?
     public var tracking: ProjectTrackingConfig?
+    /// Replaces the scripts. Empty lists and an empty run command clear them.
+    public var scripts: WorkspaceScripts?
 
     public init(
         path: String? = nil, name: String? = nil, model: String? = nil, workspace: String? = nil,
-        requirePullRequest: Bool? = nil, tracking: ProjectTrackingConfig? = nil
+        requirePullRequest: Bool? = nil, tracking: ProjectTrackingConfig? = nil, scripts: WorkspaceScripts? = nil
     ) {
+        self.scripts = scripts
         self.path = path
         self.name = name
         self.model = model
@@ -700,6 +752,10 @@ public struct SpawnRequest: Codable, Sendable {
     public var thinking: String?
     public var mode: ChatMode?
     public var workspace: WorkspaceMode?
+    /// Build chats only. Omitted means feature.
+    public var kind: WorkKind?
+    /// A Today Desk routine chat, which gets the today_write tool.
+    public var todayDesk: Bool?
     /// Exact origin branch. Ask omission reads current checkout; Build omission uses default base.
     public var baseBranch: String?
 
@@ -710,8 +766,9 @@ public struct SpawnRequest: Codable, Sendable {
         diagnosticScope: DiagnosticScope? = nil,
         diagnosticHost: HostRef? = nil,
         diagnosticHistoryAccess: Bool? = nil, diagnosticTitleFromReply: Bool? = nil,
-        diagnosticRepair: DiagnosticRepairAdmission? = nil
+        diagnosticRepair: DiagnosticRepairAdmission? = nil, kind: WorkKind? = nil
     ) {
+        self.kind = kind
         self.missionId = missionId
         self.role = role
         self.diagnosticTarget = diagnosticTarget

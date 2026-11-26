@@ -265,6 +265,7 @@ export type KernelCommand =
 	| { type: "memory.result"; callId: string; result?: JsonValue; error?: string }
 	| { type: "database.result"; callId: string; result?: JsonValue; error?: string }
 	| { type: "slack.result"; callId: string; result?: JsonValue; error?: string }
+	| { type: "today.result"; callId: string; result?: JsonValue; error?: string }
 	| {
 			type: "diagnostics.context.result";
 			callId: string;
@@ -377,6 +378,8 @@ export type KernelPacket =
 	| { type: "database.call"; callId: string; action: DatabaseAction; args: Record<string, JsonValue> }
 	/** A `slack_status` tool call, answered by `slack.result`. Applies only to Slack messages linked to this chat. */
 	| { type: "slack.call"; callId: string; args: Record<string, JsonValue> }
+	/** A `today_write` tool call, answered by `today.result`. Declared only in Today Desk routine chats. */
+	| { type: "today.call"; callId: string; args: Record<string, JsonValue> }
 	/** Content-free diagnostic read. Caller identity is derived from this supervised worker. */
 	| { type: "diagnostics.call"; callId: string; sessionId?: string; limit?: number }
 	| { type: "diagnostics.context.call"; callId: string; request: import("@pilot/protocol").DiagnosticContextRequest }

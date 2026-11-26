@@ -730,3 +730,51 @@ test("results are bounded by value length and a shared byte budget", () => {
 	assert.deepEqual(bounded[1]!.rows, []);
 	assert.equal(bounded[1]!.truncated, true);
 });
+
+test("the app's Database page finds configured, .env and worktree databases, and always reads only", async (t) => {
+	const dir = await mkdtemp(join(tmpdir(), "pilot-database-browse-"));
+	t.after(() => rm(dir, { recursive: true, force: true }));
+	const checkout = join(dir, "product");
+	const worktree = join(dir, "pilot-abc");
+	await mkdir(join(checkout, "apps/api"), { recursive: true });
+	await mkdir(join(worktree, "apps/api"), { recursive: true });
+	await writeFile(
+		join(checkout, "apps/api/.env"),
+		[
+			"PRODUCTION_DATABASE_URL_READER=postgres://reader:secret@prod-db.internal:5432/stoikio",
+			'POSTGRE_DATABASE_URL="postgres://me@localhost:5432/stoikio_main"',
+			"REDIS_URL=redis://localhost",
+			"OTHER_DATABASE_NAME=not-a-url",
+		].join("\n"),
+	);
+	await writeFile(join(worktree, "apps/api/.env"), "POSTGRE_DATABASE_URL=postgres://me@localhost:5432/stoikio_pilot_abc\n");
+	await writeFile(
+		join(dir, DATABASE_CONFIG_FILE),
+		JSON.stringify({
+			projects: { [checkout]: { environments: { staging: environments.staging, writeOnly: { write: { url: "postgres://rw@x/app" } } } } },
+		}),
+		{ mode: 0o600 },
+	);
+	const calls: Parameters<QueryRunner>[] = [];
+	const service = new DatabaseService(dir, async (...args) => {
+		calls.push(args);
+		return [{ columns: ["n"], rows: [{ n: 1 }], rowCount: 1, truncated: false }];
+	});
+	const worktrees = [{ sessionId: "s1", title: "Fix renewal", cwd: worktree }];
+	const connections = await service.connections(checkout, worktrees);
+	assert.deepEqual(connections, [
+		{ id: "config:staging", label: "staging", kind: "remote", detail: "staging/app" },
+		{ id: "env:PRODUCTION_DATABASE_URL_READER", label: "Prod (reader)", kind: "production", detail: "prod-db.internal:5432/stoikio" },
+		{ id: "env:POSTGRE_DATABASE_URL", label: "Local", kind: "local", detail: "localhost:5432/stoikio_main" },
+		{ id: "session:s1:POSTGRE_DATABASE_URL", label: "Local · Fix renewal", kind: "local", detail: "localhost:5432/stoikio_pilot_abc" },
+	]);
+	assert.ok(!JSON.stringify(connections).includes("secret"), "credentials never leave the daemon");
+	const result = await service.browse(checkout, "env:PRODUCTION_DATABASE_URL_READER", "select 1 as n", 5000, worktrees);
+	assert.deepEqual(result.rows, [{ n: 1 }]);
+	assert.equal(calls[0]![0].mode, "read");
+	assert.equal(calls[0]![0].url, "postgres://reader:secret@prod-db.internal:5432/stoikio");
+	assert.equal(calls[0]![2], 1000, "rows are capped");
+	await service.browse(checkout, "session:s1:POSTGRE_DATABASE_URL", "select 1", 10, worktrees);
+	assert.equal(calls[1]![0].url, "postgres://me@localhost:5432/stoikio_pilot_abc");
+	await assert.rejects(service.browse(checkout, "config:writeOnly", "select 1"), /Unknown database connection/);
+});

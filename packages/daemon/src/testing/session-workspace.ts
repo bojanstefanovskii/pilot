@@ -87,7 +87,8 @@ class FakeWorker implements SessionWorker {
 	}
 }
 
-export async function fixture(t: TestContext, options: SessionManagerOptions = {}) {
+/** `gitOnly` keeps the source a plain Git repository, as Git worktree workspaces require. */
+export async function fixture(t: TestContext, options: SessionManagerOptions = {}, setup: { gitOnly?: boolean } = {}) {
 	const root = await mkdtemp(join(tmpdir(), "pilot-session-workspaces-"));
 	const home = join(root, "home");
 	const source = join(root, "source");
@@ -107,12 +108,16 @@ export async function fixture(t: TestContext, options: SessionManagerOptions = {
 	git(root, "init", "--quiet", "--bare", "-b", "main", join(root, "remote.git"));
 	git(source, "remote", "add", "origin", join(root, "remote.git"));
 	git(source, "push", "--quiet", "origin", "HEAD:main");
-	jj(source, "git", "init", "--colocate");
+	if (!setup.gitOnly) jj(source, "git", "init", "--colocate");
 	await writeFile(join(source, "tracked.txt"), "source dirty, never touch\n");
-	jj(source, "status");
+	if (!setup.gitOnly) jj(source, "status");
 	const sourceState = () => ({
-		operation: jj(source, "--ignore-working-copy", "op", "log", "--no-graph", "-n", "1", "-T", "id"),
-		change: jj(source, "--ignore-working-copy", "log", "--no-graph", "-r", "@", "-T", "change_id ++ commit_id"),
+		operation: setup.gitOnly
+			? ""
+			: jj(source, "--ignore-working-copy", "op", "log", "--no-graph", "-n", "1", "-T", "id"),
+		change: setup.gitOnly
+			? ""
+			: jj(source, "--ignore-working-copy", "log", "--no-graph", "-r", "@", "-T", "change_id ++ commit_id"),
 		refs: git(source, "show-ref"),
 		status: git(source, "status", "--porcelain"),
 	});
@@ -143,7 +148,7 @@ export async function fixture(t: TestContext, options: SessionManagerOptions = {
 		return value;
 	};
 	const sessions = await manager();
-	const spawn = async (workspace?: "clone" | "direct") => {
+	const spawn = async (workspace?: "clone" | "direct" | "worktree") => {
 		const created = await sessions.spawn({ projectId: project.id, workspace, message: "workspace lifecycle" });
 		// spawn() starts this initializer asynchronously. Await its own completion rather than polling with
 		// a 10-second wall-clock budget: jj workspace creation is subprocess-heavy and can exceed that

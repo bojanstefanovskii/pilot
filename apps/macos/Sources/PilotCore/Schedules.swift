@@ -61,12 +61,16 @@ public struct ScheduleRequest: Codable, Sendable {
     public var title: String?
     public var trigger: ScheduleTrigger?
     public var at: Double?
+    /// Five-field cron in local time for a recurring routine.
+    public var cron: String?
     public var target: ScheduleTarget
 
-    public init(title: String? = nil, trigger: ScheduleTrigger? = nil, at: Double? = nil, target: ScheduleTarget) {
+    public init(title: String? = nil, trigger: ScheduleTrigger? = nil, at: Double? = nil, cron: String? = nil,
+                target: ScheduleTarget) {
         self.title = title
         self.trigger = trigger
         self.at = at
+        self.cron = cron
         self.target = target
     }
 }
@@ -78,16 +82,43 @@ public struct SchedulePatch: Codable, Sendable {
     public var at: Double?
     public var target: ScheduleTarget?
     public var expectedRevision: Int?
+    /// A new recurrence, or nil with `stopsRecurrence` to make the item one-shot.
+    public var cron: String?
+    public var stopsRecurrence = false
 
     public init(
         title: String? = nil, trigger: ScheduleTrigger? = nil, at: Double? = nil,
-        target: ScheduleTarget? = nil, expectedRevision: Int? = nil
+        target: ScheduleTarget? = nil, expectedRevision: Int? = nil, cron: String? = nil, stopsRecurrence: Bool = false
     ) {
         self.title = title
         self.trigger = trigger
         self.at = at
         self.target = target
         self.expectedRevision = expectedRevision
+        self.cron = cron
+        self.stopsRecurrence = stopsRecurrence
+    }
+
+    private enum CodingKeys: String, CodingKey { case title, trigger, at, target, expectedRevision, cron }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        trigger = try c.decodeIfPresent(ScheduleTrigger.self, forKey: .trigger)
+        at = try c.decodeIfPresent(Double.self, forKey: .at)
+        target = try c.decodeIfPresent(ScheduleTarget.self, forKey: .target)
+        expectedRevision = try c.decodeIfPresent(Int.self, forKey: .expectedRevision)
+        cron = try c.decodeIfPresent(String.self, forKey: .cron)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(trigger, forKey: .trigger)
+        try c.encodeIfPresent(at, forKey: .at)
+        try c.encodeIfPresent(target, forKey: .target)
+        try c.encodeIfPresent(expectedRevision, forKey: .expectedRevision)
+        if let cron { try c.encode(cron, forKey: .cron) } else if stopsRecurrence { try c.encodeNil(forKey: .cron) }
     }
 }
 
@@ -100,6 +131,9 @@ public struct ScheduledItem: Codable, Identifiable, Sendable {
     public let projectId: String?
     public let trigger: ScheduleTrigger
     public let at: Double?
+    /// Recurring routine: stays pending with `at` its next run.
+    public var cron: String? = nil
+    public var runs: Int? = nil
     public let target: ScheduleTarget
     public let state: ScheduleState
     public let createdAt: Double
@@ -138,7 +172,7 @@ public struct ScheduledItem: Codable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, revision, title, projectId, trigger, at, target, state, createdAt, updatedAt
-        case wakeObserved, sleepObserved, claimedAt, firedAt, sessionId, error
+        case wakeObserved, sleepObserved, claimedAt, firedAt, sessionId, error, cron, runs
     }
 
     public init(from decoder: Decoder) throws {
@@ -161,5 +195,7 @@ public struct ScheduledItem: Codable, Identifiable, Sendable {
             sessionId: try c.decodeIfPresent(String.self, forKey: .sessionId),
             error: try c.decodeIfPresent(String.self, forKey: .error)
         )
+        cron = try c.decodeIfPresent(String.self, forKey: .cron)
+        runs = try c.decodeIfPresent(Int.self, forKey: .runs)
     }
 }

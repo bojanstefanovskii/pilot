@@ -35,21 +35,17 @@ Calm is not plain. The app should look sleek and feel pleasant to the eye, like 
 - **One theme, two appearances.** Every colour comes from `Theme` tokens, which resolve per appearance
   (`Color(light:dark:)`); never use literal, system or `.secondary`-style colours in views, and add a missing token
   centrally. Dark keeps the light hierarchy: a darker sidebar beside the page, lifted cards and trays, light primary
-  buttons with `onPrimary` text, text-weight colours lightened for contrast. Dithered scenes dim to dusk; status
-  corners keep one translucent tint set. Home instead uses separate daytime clouds and evening sea pictures, preserving
-  their own colours. Artifacts are light documents and keep a light page in both. Native visuals are the exception:
+  buttons with `onPrimary` text, text-weight colours lightened for contrast. Status marks keep one tint set.
+  Artifacts are light documents and keep a light page in both. Native visuals are the exception:
   they sit on the chat itself, without a card, and follow the appearance through Theme tokens (`accent`, the
   `successInk`/`warningInk` text colours and the `chart1`...`chart6` palette).
 - **Typography carries the page.** Weight and size separate headline, section and row. Use secondary and
   tertiary text colors for meta information, and keep line lengths comfortable.
 - **Delight without noise.** Motion and effects are subtle and purposeful (a soft transition, a gentle highlight).
   They explain a change, never decorate it.
-- **Dithered gradients are Pilot's signature.** Prefer ordered (Bayer) dithering with hard square pixels over smooth
-  gradients, glows and blurs: the Home sky and the empty Inbox's coast (`DitherScene`, bundled pictures softened
-  and dithered, with the procedural `DitherSky` as fallback) set the tone. Dither is atmosphere, with a soft
-  palette and quiet motion, and keeps text readable over it. In Pilot Next it is atmosphere only: rows show state
-  with still marks and words (see State vocabulary), never dither. The Swift app keeps its status corners
-  (`DitherCorner`) unchanged until it retires.
+- **Calm, Linear-like surfaces.** No illustrations, dithering, glows or blurs: a white page, a slightly darker
+  sidebar, hairlines between rows and one indigo `brand` accent. Pages open on their content (Home on the composer,
+  an empty Inbox on one sentence). Rows show state with still marks and words (see State vocabulary).
 - **Check it by eye.** Beauty is reviewed, not assumed. Look at the real result with real
   and long content, before calling a UI change done.
 
@@ -109,16 +105,13 @@ The progress pies fill clockwise from 12 o'clock.
 | Blocked or pending | PR waiting on checks, reviews or conflicts | No |
 | Done | Finished and reviewed | No |
 
-In the sidebar, a chat's state is its dithered corner (`DitherCorner`), not an icon column: an ordered dither
-growing from the row's bottom-right corner in the state's tint. Working is a soft indigo ripple, needs you an amber
-breath, failed a steady dense red, ready to merge a steady light green. Done and other quiet chats draw nothing.
-Density and motion differ per state, so color is never the only signal, and VoiceOver reads the state. Changes
-dissolve cell by cell. Under the pointer the corner recedes toward the trailing edge (fewer cells, same pixels) and
-the row's revealed buttons use the space it frees: rows with a corner draw no hover fill and nothing cuts holes in
-the corner. Reduce Motion keeps it still and recedes it without animating.
-An agent that is idle while its background jobs run is still Working, drawn with a fainter, half-speed ripple so it
-reads as work in the background. While a chat works, its composer wears the same working corner in its bottom-right,
-behind the editor and controls, and draws nothing when idle. Live work inside a view (a running tool step, the chat's
+In the sidebar, a chat's state is one still mark at the trailing edge of its first line (`statusMark`), not an icon
+column. Each state has its own shape and tint, so color is never the only signal: Working is an indigo ring, needs
+you an amber dot, failed a red square, ready to merge a green diamond. Done and other quiet chats draw nothing, and
+VoiceOver reads the state. Marks never animate, so many working chats cost no frames. Rows with a mark draw no hover
+fill: selection stays the only row fill.
+An agent that is idle while its background jobs run is still Working, drawn with a fainter ring. While a chat works,
+its composer wears the same ring at its top trailing corner, and draws nothing when idle. Live work inside a view (a running tool step, the chat's
 working line) uses the ellipsis spinner (`EllipsisSpinner`): three grey dots that turn indigo and lift in turn, left
 to right, like a typing indicator, fainter and half speed while only background jobs run, and still under Reduce Motion.
 Chat motion plays on Core Animation (`LoopingLayerView`), never as per-frame SwiftUI updates, and changes only
@@ -171,10 +164,14 @@ Home, Inbox and Overview rows use the same line and may wrap it once.
 An unsent composer draft replaces the segments after the project with a pencil and the draft's first line, in
 muted text. It is the user's own work, so it never colours, badges or regroups the row.
 
+The sidebar opens with the workflow: Home, Inbox, Today, Sprint, Reviews, Routines and Usage, then the project
+selector and its chats. Today, Sprint, Reviews and Routines open in their own windows, so they can stay beside the
+chat being worked on; each has one primary action per row (Start, Test this PR) and reloads when the app is focused.
+
 The ⌘K command palette is one search field over one list grouped by kind, with the top match selected and arrow
 keys, Return and Escape throughout. Rows are hairline-divided, show their menu shortcut as a key cap, and chat rows
-keep their sidebar line and corner. The palette's only colour is the amber of Needs you: working and ready-to-merge
-corners turn grey there (`ditherCorner(_:monochrome:)`).
+keep their sidebar line and mark. The palette's only colour is the amber of Needs you: working and ready-to-merge
+marks turn grey there (`statusMark(_:monochrome:)`).
 Archived chats are never suggested; a search finds them after active ones, marked "Archived".
 The palette is for jumping to places first: with an empty field, pages and resources lead and only a few recent
 chats follow. When a search matches a resource and a chat equally well, the resource leads; an exact chat title

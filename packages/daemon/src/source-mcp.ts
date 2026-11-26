@@ -19,6 +19,8 @@ export function dedicatedSourceTool(kind: TrackedKind, tool: string): string | u
 	if (kind === "slack" && tool === "thread") return "slack_read_thread";
 	if (kind === "slack" && tool === "startSlack") return "slack_add_reaction";
 	if (kind === "slack" && tool === "doneSlack") return "slack_add_reaction";
+	// The only Slack message Pilot posts: a reply the user wrote or approved, in the item's own thread.
+	if (kind === "slack" && tool === "replySlack") return "slack_send_message";
 	if (kind === "slack" && tool === "reactions") return "slack_get_reactions";
 	if (kind === "slack" && tool === "searchChannels") return "slack_search_channels";
 	if (kind === "slack" && tool === "myChannels") return "slack_list_user_channels";
@@ -27,6 +29,17 @@ export function dedicatedSourceTool(kind: TrackedKind, tool: string): string | u
 
 /** Write capabilities cannot edit other fields or write any other reaction. */
 export function validSourceArguments(tool: string, args: Record<string, unknown>): boolean {
+	if (tool === "replySlack")
+		return (
+			Object.keys(args).length === 3 &&
+			typeof args.channel_id === "string" &&
+			/^[CDG][A-Z0-9]{1,199}$/.test(args.channel_id) &&
+			typeof args.thread_ts === "string" &&
+			/^\d{1,12}\.\d{6}$/.test(args.thread_ts) &&
+			typeof args.message === "string" &&
+			args.message.trim().length > 0 &&
+			args.message.length <= 4000
+		);
 	if (tool === "profile") return Object.keys(args).length === 1 && args.response_format === "detailed";
 	if (tool === "mentionsPrivate")
 		return (

@@ -6,7 +6,7 @@ import SwiftUI
 /// active missions, schedules, Linear, Slack, memory and recent results. Built from pilotd's project dashboard,
 /// which stays live over the WebSocket while the page is visible (no polling). Same shape as the mission
 /// Overview: one reading column, a headline summary and hairline-row sections, with the project name as the
-/// window title and its actions in the toolbar. Chat rows carry the sidebar's dithered corner, not a status icon.
+/// window title and its actions in the toolbar. Chat rows carry the sidebar's status mark, not a status icon.
 struct ProjectPage: View {
     @Environment(\.hostViewContext) private var hostContext
     let projectId: String
@@ -1195,7 +1195,7 @@ enum ProjectPageText {
         [
             activeMissions == 0 ? "No active missions"
                 : activeMissions == 1 ? "1 active mission" : "\(activeMissions) active missions",
-            project.usesPrivateClones ? "Isolated workspaces" : "Current checkout",
+            project.defaultWorkspaceMode.projectTitle,
             project.model.map(shortModel),
         ].compactMap { $0 }
     }

@@ -4,7 +4,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { link, mkdir, open, rename, rm } from "node:fs/promises";
+import { link, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { JsonValue } from "@earendil-works/chord";
@@ -334,6 +334,69 @@ function parameters(value: unknown): JsonValue[] {
 	return value as JsonValue[];
 }
 
+/** A database the user can browse from the app. Never carries the URL. */
+export interface BrowseConnection {
+	id: string;
+	label: string;
+	kind: "production" | "local" | "remote";
+	/** `host/database`, without user or password. */
+	detail: string;
+}
+
+/** A worktree chat whose own `.env` may point at its local database. */
+export interface BrowseWorktree {
+	sessionId: string;
+	title: string;
+	cwd: string;
+}
+
+const ENV_FILES = [".env", "apps/api/.env"];
+const ENV_LINE = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*DATABASE[A-Z0-9_]*)\s*=\s*(.*)\s*$/;
+
+/** Postgres URLs of `*DATABASE*` variables in a checkout's `.env` files, by variable, first file wins. */
+export async function envDatabaseUrls(root: string): Promise<Map<string, string>> {
+	const found = new Map<string, string>();
+	for (const file of ENV_FILES) {
+		let content: string;
+		try {
+			content = await readFile(join(root, file), "utf8");
+		} catch {
+			continue;
+		}
+		for (const line of content.split("\n")) {
+			const match = ENV_LINE.exec(line);
+			if (!match || found.has(match[1]!)) continue;
+			const value = match[2]!.replace(/^(['"])(.*)\1$/, "$2");
+			if (/^postgres(?:ql)?:\/\//.test(value)) found.set(match[1]!, value);
+		}
+	}
+	return found;
+}
+
+function connectionKind(name: string, url: string): BrowseConnection["kind"] {
+	if (/prod/i.test(name)) return "production";
+	try {
+		const host = new URL(url).hostname;
+		if (["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"].includes(host)) return "local";
+	} catch {}
+	return "remote";
+}
+
+function connectionDetail(url: string): string {
+	try {
+		const parsed = new URL(url);
+		return `${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}${parsed.pathname}`.slice(0, 200);
+	} catch {
+		return "";
+	}
+}
+
+function envLabel(variable: string): string {
+	if (/PROD.*READ/i.test(variable)) return "Prod (reader)";
+	if (/^POSTGRE(S)?_DATABASE_URL$|^DATABASE_URL$/.test(variable)) return "Local";
+	return variable;
+}
+
 export class DatabaseService {
 	readonly #configDir: string;
 	readonly #run: QueryRunner;
@@ -599,6 +662,87 @@ export class DatabaseService {
 		return (
 			args.statements === undefined ? { env, mode, ...bounded[0] } : { env, mode, results: bounded }
 		) as JsonValue;
+	}
+
+	/**
+	 * Connections the user can browse from the app: configured read-only environments, database URLs found in the
+	 * project's `.env` files (such as a production reader and the local database), and each worktree chat's own local
+	 * database. Only names and `host/database` leave the daemon, never URLs or credentials.
+	 */
+	async connections(projectPath: string, worktrees: BrowseWorktree[] = []): Promise<BrowseConnection[]> {
+		return (await this.#browseTargets(projectPath, worktrees)).map(({ url: _url, ssl: _ssl, ...connection }) => connection);
+	}
+
+	async #browseTargets(
+		projectPath: string,
+		worktrees: BrowseWorktree[],
+	): Promise<Array<BrowseConnection & { url: string; ssl?: DatabaseSsl }>> {
+		const targets: Array<BrowseConnection & { url: string; ssl?: DatabaseSsl }> = [];
+		const config = (await loadDatabaseConfig(this.#configDir))?.get(projectKey(projectPath));
+		for (const [name, modes] of config ?? []) {
+			if (!modes.read) continue;
+			targets.push({
+				id: `config:${name}`,
+				label: name,
+				kind: connectionKind(name, modes.read.url),
+				detail: connectionDetail(modes.read.url),
+				url: modes.read.url,
+				...(modes.read.ssl === undefined ? {} : { ssl: modes.read.ssl }),
+			});
+		}
+		for (const [variable, url] of await envDatabaseUrls(projectPath)) {
+			targets.push({
+				id: `env:${variable}`,
+				label: envLabel(variable),
+				kind: connectionKind(variable, url),
+				detail: connectionDetail(url),
+				url,
+			});
+		}
+		for (const worktree of worktrees) {
+			for (const [variable, url] of await envDatabaseUrls(worktree.cwd)) {
+				if (connectionKind(variable, url) !== "local") continue;
+				targets.push({
+					id: `session:${worktree.sessionId}:${variable}`,
+					label: `Local · ${worktree.title}`.slice(0, 80),
+					kind: "local",
+					detail: connectionDetail(url),
+					url,
+				});
+			}
+		}
+		return targets;
+	}
+
+	/**
+	 * The user's own query from the app's Database page. Always a READ ONLY transaction, whatever the SQL says; no
+	 * chat grant is involved, and the route requires a native app action.
+	 */
+	async browse(
+		projectPath: string,
+		connection: unknown,
+		sql: unknown,
+		maxRows: unknown = 200,
+		worktrees: BrowseWorktree[] = [],
+	): Promise<StatementResult> {
+		const id = text(connection, "connection", 200);
+		const target = (await this.#browseTargets(projectPath, worktrees)).find((candidate) => candidate.id === id);
+		if (!target) throw new Error("Unknown database connection; reload the page");
+		if (typeof maxRows !== "number" || !Number.isInteger(maxRows) || maxRows < 1)
+			throw new Error("maxRows must be a positive integer");
+		const results = await this.#limited(() =>
+			this.#run(
+				{
+					url: target.url,
+					mode: "read",
+					applicationName: "pilot-app",
+					...(target.ssl === undefined ? {} : { ssl: target.ssl }),
+				},
+				[{ sql: text(sql, "sql", DATABASE_LIMITS.sqlChars), params: [] }],
+				Math.min(maxRows, DATABASE_LIMITS.maxRows),
+			),
+		);
+		return boundResults(results)[0]!;
 	}
 
 	async #limited<T>(work: () => Promise<T>): Promise<T> {

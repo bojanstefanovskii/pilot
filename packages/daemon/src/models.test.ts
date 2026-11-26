@@ -134,12 +134,19 @@ test("Slack classification uses scoped Luna, strict JSON, no tools or thinking, 
 	);
 	stop = "error";
 	await assert.rejects(catalog.classifySlack(root, content, signal, classifierContext), /Slack classification failed/);
+	// Without Luna in scope, the cheapest scoped model classifies instead (here it reports the stubbed error).
 	await writeFile(join(root, "settings.json"), JSON.stringify({ enabledModels: ["test/large"] }));
+	// The stub only accepts Luna, so reaching it with another model proves the fallback was attempted.
+	await assert.rejects(
+		catalog.classifySlack(root, content, signal, classifierContext),
+		(error) => !/requires scoped, authenticated/.test(String(error)),
+	);
+	// Nothing in scope still fails closed.
+	await writeFile(join(root, "settings.json"), JSON.stringify({ enabledModels: ["missing/none"] }));
 	await assert.rejects(
 		catalog.classifySlack(root, content, signal, classifierContext),
 		/requires scoped, authenticated/,
 	);
-	assert.equal(calls, 3);
 });
 
 function submission(text: unknown, extra: Record<string, unknown> = {}) {

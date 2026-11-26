@@ -543,6 +543,37 @@ struct ChatView: View {
                             .frame(maxWidth: .infinity)
                             .transition(Theme.Motion.sent(reduceMotion: reduceMotion))
                     }
+                    if let source = session.trackedSource, source.kind == .slack, !session.isWorking,
+                       !session.isReadOnlyHistory {
+                        SlackReplyButton(sessionId: session.id, source: source)
+                            .frame(maxWidth: Theme.column, alignment: .leading)
+                            .frame(maxWidth: .infinity)
+                    }
+                    if session.workspace == .worktree, !session.isAsk, !session.isWorking, !session.isReadOnlyHistory,
+                       !session.isArchived {
+                        LoadClientButton(send: { message in
+                            try await perform { client, id in try await client.send(id, message: message, mode: .followUp) }
+                        })
+                        .frame(maxWidth: Theme.column, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                    }
+                    if session.isAsk, session.projectId != nil, !session.isWorking, !session.isReadOnlyHistory,
+                       !session.isArchived {
+                        FixItButton(start: { kind in
+                            let created = try await perform { client, id in try await client.fixIt(id, kind: kind) }
+                            model.open(session: created.id)
+                        })
+                        .frame(maxWidth: Theme.column, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                    }
+                    WorkspaceScriptsNotice(
+                        setup: session.setup, checks: session.checks, missionEnv: session.missionEnv,
+                        isolate: session.isReadOnlyHistory ? nil : {
+                            _ = try await perform { client, id in try await client.isolateWorkspace(id) }
+                        }
+                    )
+                        .frame(maxWidth: Theme.column, alignment: .leading)
+                        .frame(maxWidth: .infinity)
                     if transcript.failureBannerText(for: session) != nil || session.canRetryStartup == true {
                         VStack(alignment: .leading, spacing: 8) {
                             if let error = transcript.failureBannerText(for: session) { ErrorRow(text: error) }
@@ -775,8 +806,8 @@ struct ChatView: View {
         composer.draft = ""
         composer.attachments = ImageAttachments()
         let request = ScheduleRequest(
-            title: ScheduleText.title(previous, fallback: "Follow-up message"), trigger: when.trigger, at: when.at,
-            target: .message(sessionId: session.id, message: message)
+            title: ScheduleText.title(previous, fallback: "Follow-up message"), trigger: when.cron == nil ? when.trigger : nil, at: when.at,
+            cron: when.cron, target: .message(sessionId: session.id, message: message)
         )
         Task {
             do {

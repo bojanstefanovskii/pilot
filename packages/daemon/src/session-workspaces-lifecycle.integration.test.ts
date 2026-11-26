@@ -202,7 +202,7 @@ test("restoring a reclaimed workspace tells the next kernel which jj change it w
 	const created = await f.spawn();
 	await f.sessions.archive(created.id);
 	await f.sessions.reclaimWorkspace(created.id);
-	const recovery = (await f.stored(created.id)).workspaceRecovery!;
+	const recovery = (await f.stored(created.id)).workspaceRecovery as { changeId: string; commitId: string };
 	await f.sessions.restore(created.id);
 	const reset = (await f.stored(created.id)).workspaceReset;
 	assert.equal(reset?.changeId, recovery.changeId);

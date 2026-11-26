@@ -171,8 +171,13 @@ final class AppModel: ObservableObject {
     @Published var showingArchive = false
     /// The Inbox page: what waits on the user across every project. Below chats, missions and project pages.
     @Published var showingInbox = false
-    /// Local-only usage, independent of the focused project.
-    @Published var showingUsage = false
+    /// Local-only usage, independent of the focused project. Also true while a workflow page (Today, Sprint,
+    /// Reviews, Routines) is shown, so every navigation that leaves Usage leaves those pages too.
+    @Published var showingUsage = false { didSet { if !showingUsage, workflowPage != nil { workflowPage = nil } } }
+    /// The workflow page shown in place of Usage, or nil for Usage itself.
+    @Published var workflowPage: WorkflowPage?
+    /// Your open PRs that need you (changes requested, failing CI), by project, refreshed in the background.
+    @Published var pullRequestsNeedingYou: [String: Int] = [:]
     /// The Inbox's project filter (nil lists every project). Preset to the focused project each time the Inbox
     /// opens, and never saved.
     @Published var inboxProjectId: String?
@@ -769,7 +774,12 @@ final class AppModel: ObservableObject {
 
     /// The new-chat composer, prefilled from a tracked item in Build mode. Nothing starts until the user sends.
     func startChat(from item: TrackedItem, prefill: TrackedItemPrefill?, context: HostViewContext? = nil) {
-        guard newSession(in: item.projectId, message: TrackedItemText.chatPrompt(item, prefill: prefill), context: context) else { return }
+        var message = TrackedItemText.chatPrompt(item, prefill: prefill)
+        // Side-letter requests run the personal playbook, which reads the thread and routes to the repo's skills.
+        if item.kind == .slack, item.slack?.label?.caseInsensitiveCompare("Sideletter") == .orderedSame {
+            message = "Use the sideletter-from-slack skill on this Slack request.\n\n" + message
+        }
+        guard newSession(in: item.projectId, message: message, context: context) else { return }
         newSessionForm.consumeDraft(from: self)
         newSessionForm.trackedItem = TrackedItemBinding(itemId: item.id, projectId: item.projectId,
                                                         label: TrackedItemText.identifier(item))
@@ -1054,7 +1064,8 @@ final class AppModel: ObservableObject {
             let item = group.representative, value = item.value
             return Project(id: item.ref.host == localHost ? value.id : item.ref.storageKey,
                 name: value.name, path: value.path, model: value.model, workspace: value.workspace,
-                requirePullRequest: value.requirePullRequest, tracking: value.tracking, createdAt: value.createdAt)
+                requirePullRequest: value.requirePullRequest, tracking: value.tracking, scripts: value.scripts,
+                createdAt: value.createdAt)
         }
         return projectFolders.sections(values, projectId: \.id).flatMap(\.items)
     }

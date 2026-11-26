@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type TestContext, test } from "node:test";
 import type { Project, TrackingJson } from "@pilot/protocol";
-import { linearParentHeaders, linearPrefill, pollLinear } from "./linear-source.ts";
+import { linearParentHeaders, linearPrefill, pollLinear, sprintFields } from "./linear-source.ts";
 import { ProjectStore } from "./projects.ts";
 import { SourceRateLimited } from "./source-mcp.ts";
 import { logCause, type SourcePollContext, SourceRegistry } from "./sources.ts";
@@ -388,11 +388,7 @@ test("tracked items, the Inbox and the dashboard carry parent headers; a sub-iss
 	assert.equal(byId.get("issue-4")?.linearParent?.identifier, "ENG-9");
 	assert.equal(byId.get("issue-2")?.linearParent?.id, "issue-1");
 	assert.equal(byId.get("issue-1")?.linearParent, undefined);
-	const inbox = await f.registry.inbox(f.project.id, 10);
-	assert.equal(
-		inbox.linear?.items.find((item) => item.externalId === "issue-4")?.linearParent?.title,
-		"Onboarding revamp",
-	);
+	assert.equal((await f.registry.inbox(f.project.id, 10)).linear, undefined);
 	const source = f.registry.dashboard(f.project.id)[0]!;
 	assert.equal(source.items.find((item) => item.externalId === "issue-4")?.linearParent?.url, EPIC.url);
 	assert.equal(source.done?.items.find((item) => item.externalId === "issue-2")?.linearParent?.identifier, "ENG-1");
@@ -503,4 +499,17 @@ test("unconfigured background sources do no work, and the periodic full refresh 
 	const before = f.seen.length;
 	await f.registry.poll(id);
 	assert.ok(f.seen.slice(before).every((call) => call.args.updatedAt === undefined));
+});
+
+test("sprint display fields keep project, labels and creation date, and drop malformed values", () => {
+	assert.deepEqual(
+		sprintFields({
+			project: "CPQ: Broker Platform",
+			labels: ["Bug", { name: "August Scope" }, 3, " "],
+			createdAt: "2026-11-18T10:00:00.000Z",
+		}),
+		{ project: "CPQ: Broker Platform", labels: ["Bug", "August Scope"], createdAt: Date.parse("2026-11-18T10:00:00.000Z") },
+	);
+	assert.deepEqual(sprintFields({ project: { name: "Renewals" }, labels: [], createdAt: "soon" }), { project: "Renewals" });
+	assert.deepEqual(sprintFields({ project: null }), {});
 });

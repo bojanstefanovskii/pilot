@@ -818,7 +818,7 @@ private struct CommandPaletteRow: View {
         .padding(.trailing, signal == nil ? 0 : 24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .ditherCorner(signal, background: session?.isWaitingOnJobs == true, monochrome: true)
+        .statusMark(signal, background: session?.isWaitingOnJobs == true, monochrome: true)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.row).fill(selected ? Theme.selected : .clear))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(selected ? .isSelected : [])

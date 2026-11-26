@@ -11,7 +11,14 @@ extension AppModel {
         showingArchive = false; showingInbox = false
         selectedSessionId = nil; selectedMissionId = nil; selectedProjectId = nil
         clearProjectSubpage()
+        workflowPage = nil
         showingUsage = true
+    }
+
+    /// Today, Sprint, Reviews or Routines, as a page of the main window.
+    func showWorkflow(_ page: WorkflowPage) {
+        showUsage()
+        workflowPage = page
     }
 }
 

@@ -24,6 +24,10 @@ export interface WorkspaceContext {
 	shared?: { repository: string; name: string };
 	upstream?: string;
 	jj: boolean;
+	/** A `git worktree` sharing the source repository's refs, rather than a private clone. */
+	worktree?: true;
+	/** Squad agent sharing the database and services set up in this other agent's workspace. */
+	missionEnv?: string;
 }
 
 export interface PilotContext {
@@ -39,6 +43,8 @@ export interface PilotContext {
 	diagnosticHistoryAccess?: boolean;
 	/** Native-confirmed read-only evidence subject for an ordinary repair Build. */
 	repairDiagnostics?: import("@pilot/protocol").DiagnosticEvidenceSubject;
+	/** A Today Desk routine chat, which gets the `today_write` tool. */
+	todayDesk?: boolean;
 	/** This project chat has the host-owned memory tools. */
 	projectMemory?: boolean;
 	/** Daemon-managed source view with a per-chat temp directory. */
@@ -348,9 +354,18 @@ export function pilotPrompt(context: PilotContext, artifactsAvailable = false, c
 					"- Work on one task bookmark, keeping an existing one. If a new bookmark is needed, create it with `jj bookmark create <name> -r @`, move it after committing with `jj bookmark set <name> -r @-`, and push it alone with `jj git push --bookmark <name>`.",
 				);
 			}
+		} else if (workspace.worktree) {
+			lines.push(
+				`- Your working directory is a Git worktree of ${workspace.source}, started from \`${workspace.base}\`${workspace.branch ? `, on branch \`${workspace.branch}\`` : ", initially detached with no task branch"}. Uncommitted changes in the user's own checkout are not here. Branches are shared with the user's checkout and other worktrees, so create a new task branch and never check out, rewrite or delete branches you did not create.`,
+			);
 		} else {
 			lines.push(
 				`- Your working directory is a private clone of ${workspace.source}, started from \`${workspace.base}\`${workspace.branch ? `, with branch/bookmark \`${workspace.branch}\`` : ", initially detached with no task branch or bookmark"}. Uncommitted changes in the user's own checkout are not here, and nothing you do here touches it.`,
+			);
+		}
+		if (workspace.missionEnv) {
+			lines.push(
+				`- Your mission's agents share the database and services set up in ${workspace.missionEnv}. Change the database schema or run migrations only when your task says so, and say in your result when you did.`,
 			);
 		}
 		if (!workspace.shared && requirePullRequest && !localOnly && workspace.jj) {

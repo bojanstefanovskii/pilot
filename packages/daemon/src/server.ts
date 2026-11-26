@@ -37,9 +37,11 @@ import type {
 	NativeDiagnosticsBatch,
 	OperationHost,
 	ProjectRequest,
+	PullRequestActionRequest,
 	QueuedMessageGuard,
 	RenameSessionRequest,
 	RepositorySelection,
+	ResolveReviewThreadsRequest,
 	ReviewRequest,
 	RewindRequest,
 	SchedulePatch,
@@ -49,12 +51,16 @@ import type {
 	SessionCommandsResponse,
 	SessionHistoryPage,
 	SessionJobsResponse,
+	SessionPullRequest,
 	SessionSummary,
 	SourcePollRequest,
 	SourceSignInRequest,
 	SpawnRequest,
 	StartMissionCoordinatorRequest,
 	StartMissionTaskRequest,
+	StartWorkChatRequest,
+	TodayItemPatch,
+	WorkKind,
 	SubagentMessageRequest,
 	SubscriptionForceRequest,
 	TerminalSocketMessage,
@@ -94,6 +100,17 @@ import { PathCompletionReader } from "./path-completion.ts";
 import type { PowerService } from "./power.ts";
 import { type DashboardProviders, ProjectDashboardService } from "./project-dashboard.ts";
 import type { ProjectMemoryService } from "./project-memory.ts";
+import {
+	PULL_REQUEST_ACTIONS,
+	actionPullRequest,
+	fixItMessage,
+	listMyPullRequests,
+	listReviewRequests,
+	listReviewThreads,
+	pullRequestActionMessage,
+	resolveReviewThreads,
+	testPullRequestMessage,
+} from "./pr-actions.ts";
 import { EnvironmentRevisionConflict, expandHome, type ProjectStore } from "./projects.ts";
 import { PTY_INPUT_CHUNK } from "./pty-input.ts";
 import { RepositoryBrowser } from "./repository-browser.ts";
@@ -113,6 +130,8 @@ import { validatePatch } from "./tracked-items.ts";
 import { type ReservationReceipt, UpdateReservation } from "./update-reservation.ts";
 import { UsageQueryCapacityError } from "./usage-history.ts";
 import { usageAnalyticsQuery } from "./usage-history-validation.ts";
+import { TodayStore } from "./today.ts";
+import { trackedItemLinker, WorkStarter } from "./work-starter.ts";
 
 const MAX_BODY = 1024 * 1024;
 const HISTORY_PAGE_DEFAULT = 100;
@@ -476,6 +495,12 @@ export function createDaemonServer(
 	const pathCompletion = new PathCompletionReader();
 	const repositories = new RepositoryBrowser(projects);
 	const attachments = new AttachmentStore(_config.home);
+	let ownToday: TodayStore | undefined;
+	const today = () => {
+		if (sessions.todayStore) return sessions.todayStore;
+		ownToday ??= new TodayStore(_config.home);
+		return ownToday;
+	};
 	const transfers = new RuntimeAdmission();
 	const mutations = new RuntimeAdmission();
 	const runtimeSources = [
@@ -759,6 +784,118 @@ export function createDaemonServer(
 				prefix,
 				daemonId: hello.daemonId,
 				lineageId: hello.lineageId,
+			});
+		}
+		if (parts[1] === "today" && parts.length === 2 && req.method === "GET") {
+			res.setHeader("cache-control", "no-store");
+			return json(res, 200, await today().read(url.searchParams.get("date") ?? undefined));
+		}
+		if (parts[1] === "today" && parts[2] === "items" && parts.length === 4 && req.method === "PATCH") {
+			const body = await readJson<TodayItemPatch | null>(req);
+			if (!body || typeof body !== "object") throw new HttpError(400, "patch is required");
+			return json(
+				res,
+				200,
+				await today().patchItem(decodeURIComponent(parts[3]!), body, url.searchParams.get("date") ?? undefined),
+			);
+		}
+		if (parts[1] === "projects" && parts[3] === "my-pull-requests" && parts.length === 4 && req.method === "GET") {
+			const project = projects.require(decodeURIComponent(parts[2]!));
+			return json(res, 200, { pullRequests: await listMyPullRequests(project.path) });
+		}
+		if (parts[1] === "projects" && parts[3] === "review-requests" && parts.length === 4 && req.method === "GET") {
+			const project = projects.require(decodeURIComponent(parts[2]!));
+			return json(res, 200, { requests: await listReviewRequests(project.path) });
+		}
+		if (parts[1] === "projects" && parts[3] === "test-pull-request" && parts.length === 4 && req.method === "POST") {
+			const project = projects.require(decodeURIComponent(parts[2]!));
+			const body = await readJson<{ number?: unknown } | null>(req);
+			if (!body || typeof body.number !== "number") throw new HttpError(400, "number is required");
+			const request = (await listReviewRequests(project.path)).find((candidate) => candidate.number === body.number);
+			if (!request) throw new HttpError(409, "That PR no longer requests your review");
+			const created = await sessions.spawn({
+				projectId: project.id,
+				mode: "build",
+				baseBranch: request.branch,
+				title: `Test #${request.number}: ${request.title}`.slice(0, 200),
+				message: testPullRequestMessage(request),
+			});
+			return json(res, 201, created);
+		}
+		if (parts[1] === "tracked-items" && parts[3] === "slack-reply" && parts.length === 4 && req.method === "POST") {
+			if (!tracking) throw new ServiceUnavailable("Tracking unavailable");
+			const body = await readJson<{ text?: unknown } | null>(req);
+			if (!body || typeof body.text !== "string") throw new HttpError(400, "text is required");
+			await tracking.replySlack(decodeURIComponent(parts[2]!), body.text);
+			return json(res, 202, { ok: true });
+		}
+		if (parts[1] === "sessions" && parts[3] === "last-reply" && parts.length === 4 && req.method === "GET") {
+			if (!sessions.get(parts[2]!)) throw new NotFound("Unknown session");
+			return json(res, 200, { text: (await sessions.lastAssistantReply(parts[2]!, 4000)) ?? "" });
+		}
+		if (parts[1] === "sessions" && parts[3] === "fix-it" && parts.length === 4 && req.method === "POST") {
+			const investigation = sessions.get(parts[2]!);
+			if (!investigation) throw new NotFound("Unknown session");
+			if (investigation.mode !== "ask" || !investigation.projectId)
+				throw new HttpError(409, "Fix it starts from an Ask chat in a project");
+			const body = (await readJson<{ kind?: WorkKind } | null>(req)) ?? {};
+			if (body.kind !== undefined && body.kind !== "quick" && body.kind !== "feature")
+				throw new HttpError(400, "kind must be quick or feature");
+			const conclusion = await sessions.lastAssistantReply(investigation.id, 8000);
+			if (!conclusion) throw new HttpError(409, "The investigation has no conclusion yet");
+			const created = await sessions.spawn({
+				projectId: investigation.projectId,
+				mode: "build",
+				...(body.kind ? { kind: body.kind } : {}),
+				title: `Fix: ${investigation.title}`.slice(0, 200),
+				message: fixItMessage(investigation.title, conclusion),
+			});
+			return json(res, 201, created);
+		}
+		if (
+			parts[1] === "sessions" &&
+			parts[3] === "pull-request-actions" &&
+			parts.length === 4 &&
+			req.method === "POST"
+		) {
+			const session = sessions.get(parts[2]!);
+			if (!session) throw new NotFound("Unknown session");
+			const body = await readJson<PullRequestActionRequest | null>(req);
+			if (!body || !PULL_REQUEST_ACTIONS.includes(body.action))
+				throw new HttpError(400, "Unknown pull request action");
+			if (body.url !== undefined && typeof body.url !== "string") throw new HttpError(400, "url must be a string");
+			let pr: SessionPullRequest;
+			try {
+				pr = actionPullRequest(session, body.url);
+			} catch (error) {
+				throw new HttpError(409, error instanceof Error ? error.message : String(error));
+			}
+			await sessions.send(session.id, pullRequestActionMessage(body.action, pr));
+			return json(res, 202, sessions.get(session.id));
+		}
+		if (parts[1] === "sessions" && parts[3] === "review-threads" && parts.length === 4 && req.method === "GET") {
+			const session = sessions.get(parts[2]!);
+			if (!session) throw new NotFound("Unknown session");
+			const pr = actionPullRequest(session, url.searchParams.get("url") ?? undefined);
+			return json(res, 200, { url: pr.url, threads: await listReviewThreads(pr.url, session.cwd || _config.home) });
+		}
+		if (
+			parts[1] === "sessions" &&
+			parts[3] === "review-threads" &&
+			parts[4] === "resolve" &&
+			parts.length === 5 &&
+			req.method === "POST"
+		) {
+			const session = sessions.get(parts[2]!);
+			if (!session) throw new NotFound("Unknown session");
+			const body = await readJson<ResolveReviewThreadsRequest | null>(req);
+			if (!body || typeof body.url !== "string" || !Array.isArray(body.threadIds))
+				throw new HttpError(400, "url and threadIds are required");
+			if (!body.threadIds.every((id) => typeof id === "string" && /^[\w=-]{1,128}$/.test(id)))
+				throw new HttpError(400, "threadIds must be GitHub node IDs");
+			const pr = actionPullRequest(session, body.url);
+			return json(res, 200, {
+				resolved: await resolveReviewThreads(pr.url, body.threadIds, session.cwd || _config.home),
 			});
 		}
 		if (parts[1] === "sessions" && parts.length === 4 && parts[3] === "files" && req.method === "GET") {
@@ -1176,6 +1313,26 @@ export function createDaemonServer(
 			}
 		}
 		if (missions && (await missionRoute(missions, parts, url, req, res))) return;
+		if (parts[1] === "projects" && parts[3] === "databases" && parts[4] === "query" && parts.length === 5) {
+			res.setHeader("cache-control", "no-store");
+			projects.require(parts[2]!);
+			if (!githubSetup) return json(res, 503, { error: "Native host actions are unavailable." });
+			try {
+				await githubSetup.authenticate(req.headers["x-pilot-github-capability"]);
+			} catch {
+				return json(res, 403, { error: "Database queries require a native app action." });
+			}
+			if (req.method === "GET") return json(res, 200, await sessions.browseDatabase(parts[2]!));
+			if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+			const body = await readJson<{ connection?: unknown; sql?: unknown; maxRows?: unknown } | null>(req, 128 * 1024);
+			if (!body) throw new HttpError(400, "connection and sql are required");
+			try {
+				return json(res, 200, await sessions.browseDatabase(parts[2]!, body));
+			} catch (error) {
+				// Postgres errors (syntax, permission, read-only violation) are the user's to read.
+				return json(res, 400, { error: error instanceof Error ? error.message : String(error) });
+			}
+		}
 		if (parts[1] === "projects" && parts[3] === "databases" && parts.length === 4) {
 			res.setHeader("cache-control", "no-store");
 			projects.require(parts[2]!);
@@ -1541,7 +1698,8 @@ export function createDaemonServer(
 				await projects.branches(
 					parts[2]!,
 					url.searchParams.get("mode") === "ask" ||
-						(url.searchParams.get("mode") === "build" && url.searchParams.get("workspace") === "clone"),
+						(url.searchParams.get("mode") === "build" &&
+							["clone", "worktree"].includes(url.searchParams.get("workspace") ?? "")),
 				),
 			);
 		if (parts[1] === "mission-catalog" && parts.length === 2 && req.method === "GET") {
@@ -1568,6 +1726,21 @@ export function createDaemonServer(
 				);
 			}
 			if (req.method === "POST") return json(res, 201, await sessions.spawn(await readJson<SpawnRequest>(req)));
+		}
+		if (parts[1] === "work" && parts[2] === "chat" && parts.length === 3 && req.method === "POST") {
+			const body = await readJson<StartWorkChatRequest>(req);
+			if (!body || typeof body !== "object" || !body.spawn || typeof body.spawn !== "object")
+				throw new HttpError(400, "spawn is required");
+			const trackedItems = tracking
+				? trackedItemLinker({ require: (id) => tracking.requireItem(id) }, tracking)
+				: undefined;
+			const started = await new WorkStarter({ sessions, trackedItems }).startChat({
+				spawn: body.spawn,
+				trackedItemId: body.trackedItemId,
+			});
+			const session = sessions.get(started.sessionId);
+			if (!session) throw new HttpError(500, "Started chat is missing");
+			return json(res, 201, { session, ...(started.linkError ? { linkError: started.linkError } : {}) });
 		}
 		if (parts[1] === "sessions" && parts.length === 3 && req.method === "GET") {
 			const session = sessions.get(parts[2]!);
@@ -1840,6 +2013,7 @@ export function createDaemonServer(
 				return json(res, 202, await sessions.stop(id));
 			}
 			if (parts[3] === "retry-startup") return json(res, 200, await sessions.retryStartup(id));
+			if (parts[3] === "isolate") return json(res, 200, await sessions.isolateWorkspace(id));
 			if (parts[3] === "compact") {
 				const body = (await readJson<CompactRequest | null>(req)) ?? {};
 				if (body.instructions !== undefined && typeof body.instructions !== "string")

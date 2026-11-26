@@ -712,8 +712,19 @@ private struct SizeStepper: View {
 final class ProjectEditor: ObservableObject {
     @Published var name = ""
     @Published var model = ""
-    @Published var privateClones = true
+    @Published var workspaceMode: WorkspaceMode = .clone
     @Published var requirePullRequest = true
+    /// One command per line.
+    @Published var setupScript = ""
+    @Published var runCommand = ""
+    /// One command per line.
+    @Published var checksScript = ""
+    /// One command per line.
+    @Published var teardownScript = ""
+    /// One command per line.
+    @Published var quickSetupScript = ""
+    /// One command per line.
+    @Published var agentSetupScript = ""
     @Published var slackChannels: [TrackedChannelRef] = []
     @Published var slackMentionOnlyChannels: Set<String> = []
     @Published var slackGroupHandles = ""
@@ -737,8 +748,9 @@ final class ProjectEditor: ObservableObject {
     private struct Fields: Equatable {
         var name: String
         var model: String
-        var privateClones: Bool
+        var workspaceMode: WorkspaceMode
         var requirePullRequest: Bool
+        var scripts: WorkspaceScripts
         var channels: [String]
         var mentionOnlyChannels: Set<String>
         var groupHandles: String
@@ -746,11 +758,11 @@ final class ProjectEditor: ObservableObject {
         var stateMappings: [String: LinearStateMapping]
         var labels: [SlackProjectLabel]
 
-        init(name: String, model: String, privateClones: Bool, requirePullRequest: Bool, channels: [String],
-             mentionOnlyChannels: Set<String>, groupHandles: String, team: String?,
+        init(name: String, model: String, workspaceMode: WorkspaceMode, requirePullRequest: Bool, scripts: WorkspaceScripts,
+             channels: [String], mentionOnlyChannels: Set<String>, groupHandles: String, team: String?,
              stateMappings: [String: LinearStateMapping], labels: [SlackProjectLabel]) {
-            self.name = name; self.model = model; self.privateClones = privateClones
-            self.requirePullRequest = requirePullRequest; self.channels = channels
+            self.name = name; self.model = model; self.workspaceMode = workspaceMode
+            self.requirePullRequest = requirePullRequest; self.scripts = scripts; self.channels = channels
             self.mentionOnlyChannels = mentionOnlyChannels; self.groupHandles = groupHandles; self.team = team
             self.stateMappings = stateMappings; self.labels = labels
         }
@@ -758,8 +770,9 @@ final class ProjectEditor: ObservableObject {
         /// What `load` puts in the form for this project.
         init(_ project: Project) {
             let tracking = project.tracking
-            self.init(name: project.name, model: project.model ?? "", privateClones: project.usesPrivateClones,
+            self.init(name: project.name, model: project.model ?? "", workspaceMode: project.defaultWorkspaceMode,
                       requirePullRequest: project.effectiveRequirePullRequest,
+                      scripts: WorkspaceScripts.normalized(project.scripts),
                       channels: tracking?.slackChannels ?? [],
                       mentionOnlyChannels: Set(tracking?.slackMentionOnlyChannels ?? []),
                       groupHandles: (tracking?.slackGroupHandles ?? []).joined(separator: ", "),
@@ -770,8 +783,8 @@ final class ProjectEditor: ObservableObject {
     }
 
     private var fields: Fields {
-        Fields(name: name, model: model, privateClones: privateClones, requirePullRequest: requirePullRequest,
-               channels: slackChannels.map(\.id), mentionOnlyChannels: slackMentionOnlyChannels,
+        Fields(name: name, model: model, workspaceMode: workspaceMode, requirePullRequest: requirePullRequest,
+               scripts: editedScripts, channels: slackChannels.map(\.id), mentionOnlyChannels: slackMentionOnlyChannels,
                groupHandles: slackGroupHandles, team: linearTeam?.id, stateMappings: linearStateMappings, labels: savedLabels)
     }
 
@@ -841,8 +854,14 @@ final class ProjectEditor: ObservableObject {
         latest = project
         name = project.name
         model = project.model ?? ""
-        privateClones = project.usesPrivateClones
+        workspaceMode = project.defaultWorkspaceMode
         requirePullRequest = project.effectiveRequirePullRequest
+        setupScript = WorkspaceScripts.lines(project.scripts?.setup)
+        runCommand = project.scripts?.run ?? ""
+        checksScript = WorkspaceScripts.lines(project.scripts?.checks)
+        teardownScript = WorkspaceScripts.lines(project.scripts?.teardown)
+        quickSetupScript = WorkspaceScripts.lines(project.scripts?.quickSetup)
+        agentSetupScript = WorkspaceScripts.lines(project.scripts?.agentSetup)
         let tracking = project.tracking
         slackLabels = (tracking?.slackLabels ?? []).map(EditableSlackLabel.init)
         slackChannels = (tracking?.slackChannels ?? []).map { TrackedChannelRef(id: $0, name: tracking?.slackChannelNames?[$0]) }
@@ -879,7 +898,7 @@ final class ProjectEditor: ObservableObject {
         let groups = slackGroupHandles.split { $0 == "," || $0.isWhitespace }.map(String.init)
         let mentionOnly = slackChannels.map(\.id).filter { slackMentionOnlyChannels.contains($0) }
         return ProjectRequest(
-            name: name, model: model, workspace: privateClones ? "clone" : "direct",
+            name: name, model: model, workspace: workspaceMode.rawValue,
             requirePullRequest: requirePullRequest,
             tracking: ProjectTrackingConfig(
                 slackChannels: slackChannels.map(\.id),
@@ -890,9 +909,27 @@ final class ProjectEditor: ObservableObject {
                 linearStateMappings: linearTeam == nil || linearStateMappings.isEmpty ? nil : linearStateMappings,
                 slackMentionOnlyChannels: mentionOnly.isEmpty ? nil : mentionOnly,
                 slackGroupHandles: groups.isEmpty ? nil : groups
-            )
+            ),
+            // Always sent, so clearing every field clears the saved scripts.
+            scripts: WorkspaceScripts(setup: editedScripts.setup ?? [], run: editedScripts.run ?? "",
+                                      checks: editedScripts.checks ?? [], teardown: editedScripts.teardown ?? [],
+                                      quickSetup: editedScripts.quickSetup ?? [],
+                                      agentSetup: editedScripts.agentSetup ?? [])
         )
     }
+
+    /// The scripts as the form holds them, with empty parts left out.
+    private var editedScripts: WorkspaceScripts {
+        WorkspaceScripts.normalized(WorkspaceScripts(
+            setup: WorkspaceScripts.steps(fromLines: setupScript),
+            run: runCommand,
+            checks: WorkspaceScripts.steps(fromLines: checksScript),
+            teardown: WorkspaceScripts.steps(fromLines: teardownScript),
+            quickSetup: WorkspaceScripts.steps(fromLines: quickSetupScript),
+            agentSetup: WorkspaceScripts.steps(fromLines: agentSetupScript)
+        ))
+    }
+
 }
 
 /// One project's settings. Edits stay local until Save, whose bar appears only while something changed. Remove, at
@@ -931,13 +968,18 @@ private struct ProjectSettings: View {
                 }
             }
             SettingsSection("Workspace") {
-                SettingsToggle("Isolated workspace per chat",
-                               detail: "Chats get their own working copy, so they never touch your checkout. Turn off to run in the folder itself.",
-                               isOn: $editor.privateClones)
+                SettingsRow("Chats work in", detail: editor.workspaceMode.settingsDetail) {
+                    Picker("Chats work in", selection: $editor.workspaceMode) {
+                        ForEach([WorkspaceMode.clone, .worktree, .direct], id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 SettingsToggle("Require a pull request",
                                detail: "Publish changes through a pull request. Turning this off allows direct pushes to the default branch. Applies when a chat next starts working.",
                                isOn: $editor.requirePullRequest)
             }
+            ProjectScriptsSection(editor: editor)
             EnvironmentSettingsSection(model: environment, hostName: hostName, check: {
                 Task { await environment.check(client: client, cacheKey: environmentKey) }
             }, loadCatalog: {
@@ -1088,4 +1130,59 @@ func chooseFolder(startingAt path: String? = nil) -> String? {
     panel.prompt = "Choose"
     if let path, !path.isEmpty { panel.directoryURL = URL(filePath: (path as NSString).expandingTildeInPath) }
     return panel.runModal() == .OK ? panel.url?.path : nil
+}
+
+private extension WorkspaceMode {
+    var settingsDetail: String {
+        switch self {
+        case .clone: return "Each chat gets a private copy of the repository, so it never touches your checkout."
+        case .worktree: return "Each chat gets a Git worktree next to your checkout, for scripts that rely on git worktree list."
+        case .direct: return "Chats run in the project folder itself."
+        }
+    }
+}
+
+/// Personal workspace scripts, kept in Pilot and never in the repository. Commands run in the chat's workspace through
+/// your login shell, with PILOT_SESSION_ID, PILOT_WORKSPACE, PILOT_PROJECT_PATH and PILOT_BRANCH set.
+private struct ProjectScriptsSection: View {
+    @ObservedObject var editor: ProjectEditor
+
+    var body: some View {
+        SettingsSection("Scripts") {
+            ScriptField(title: "Setup", detail: "Runs once in each new isolated workspace, before the agent starts. One command per line; the first failure stops the chat until you retry.",
+                        prompt: "pnpm install\nbash ~/scripts/setup-worktree.sh", text: $editor.setupScript)
+            ScriptField(title: "Quick fix setup", detail: "Replaces Setup for Quick fix chats: reuse the main checkout's environment ($PILOT_PROJECT_PATH) instead of building a new one.",
+                        prompt: "ln -s \"$PILOT_PROJECT_PATH/node_modules\" node_modules", text: $editor.quickSetupScript)
+            ScriptField(title: "Squad agent setup", detail: "Replaces Setup for a mission's later agents, to share the first agent's database and services ($PILOT_MISSION_ENV). Isolate gives an agent the full Setup.",
+                        prompt: "cp \"$PILOT_MISSION_ENV/apps/api/.env\" apps/api/.env", text: $editor.agentSetupScript)
+            ScriptField(title: "Run", detail: "Starts the dev server from the chat's Run tab.",
+                        prompt: "bash scripts/run-worktree.sh", text: $editor.runCommand, singleLine: true)
+            ScriptField(title: "Checks", detail: "Run after a turn that changed files. A failure goes back to the agent, at most three times until you write again.",
+                        prompt: "pnpm lint\npnpm test --filter=...[HEAD]", text: $editor.checksScript)
+            ScriptField(title: "Teardown", detail: "Runs before an archived chat's Git worktree is removed, to free what setup created. A failure keeps the worktree.",
+                        prompt: "bash scripts/teardown-worktree.sh", text: $editor.teardownScript)
+        }
+    }
+
+    private struct ScriptField: View {
+        let title: String
+        let detail: String
+        let prompt: String
+        @Binding var text: String
+        var singleLine = false
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.pilot(.body, weight: .medium)).foregroundStyle(Theme.foreground)
+                Text(detail).font(.pilot(.caption)).foregroundStyle(Theme.mutedForeground)
+                    .fixedSize(horizontal: false, vertical: true)
+                TextField(title, text: $text, prompt: Text(prompt), axis: singleLine ? .horizontal : .vertical)
+                    .labelsHidden()
+                    .font(.pilot(.label, design: .monospaced))
+                    .lineLimit(singleLine ? 1...1 : 2...8)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .padding(.vertical, 4)
+        }
+    }
 }

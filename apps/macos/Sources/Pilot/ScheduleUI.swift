@@ -9,6 +9,8 @@ import SwiftUI
 struct ScheduleWhen: Equatable {
     var trigger: ScheduleTrigger
     var at: Double? = nil
+    /// Repeat on this five-field cron (local time). Implies an at trigger; pilotd computes the next time.
+    var cron: String? = nil
 }
 
 /// Labels, times and notification text for scheduled items, kept apart from views so they can be tested.
@@ -41,6 +43,9 @@ enum ScheduleText {
     /// Trailing row label: the trigger, or the time of an "at" item.
     static func when(_ item: ScheduledItem, now: Date = Date(), calendar: Calendar = .current) -> String {
         guard item.trigger == .at, let at = item.at else { return label(item.trigger) }
+        if let cron = item.cron {
+            return "\(cron) · next \(RelativeDate.upcoming(Date(timeIntervalSince1970: at / 1000), now: now, calendar: calendar))"
+        }
         return RelativeDate.upcoming(Date(timeIntervalSince1970: at / 1000), now: now, calendar: calendar)
     }
 
@@ -162,12 +167,16 @@ struct ScheduleSheet: View {
     let submit: (ScheduleWhen) async throws -> Void
     @State private var trigger: ScheduleTrigger
     @State private var date: Date
+    @State private var repeats: Bool
+    @State private var cron: String
     @State private var saving = false
     @State private var error: String?
     @Environment(\.dismiss) private var dismiss
 
-    init(title: String, confirmTitle: String, trigger: ScheduleTrigger, at: Double? = nil,
+    init(title: String, confirmTitle: String, trigger: ScheduleTrigger, at: Double? = nil, cron: String? = nil,
          submit: @escaping (ScheduleWhen) async throws -> Void) {
+        _repeats = State(initialValue: cron != nil)
+        _cron = State(initialValue: cron ?? "0 9 * * 1-5")
         self.title = title
         self.confirmTitle = confirmTitle
         self.submit = submit
@@ -183,6 +192,7 @@ struct ScheduleSheet: View {
 
     private var canSave: Bool {
         guard !saving, trigger != .removed else { return false }
+        if trigger == .at, repeats { return cron.split(separator: " ").count == 5 }
         if trigger == .at { return date > Date() }
         return true
     }
@@ -197,10 +207,18 @@ struct ScheduleSheet: View {
                     }
                     .pickerStyle(.radioGroup)
                     if trigger == .at {
-                        DatePicker("Time", selection: $date, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                        Toggle("Repeat", isOn: $repeats)
+                        if repeats {
+                            TextField("Cron", text: $cron, prompt: Text("minute hour day month weekday"))
+                                .font(.pilot(.label, design: .monospaced))
+                        } else {
+                            DatePicker("Time", selection: $date, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                        }
                     }
                 } footer: {
-                    Text(ScheduleText.explanation(trigger))
+                    Text(trigger == .at && repeats
+                         ? "Runs at every matching minute, local time. \"0 9 * * 1-5\" is 9:00 on weekdays."
+                         : ScheduleText.explanation(trigger))
                         .font(.pilot(.caption)).foregroundStyle(Theme.mutedForeground)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -213,7 +231,10 @@ struct ScheduleSheet: View {
         guard canSave else { return }
         saving = true
         error = nil
-        let when = ScheduleWhen(trigger: trigger, at: trigger == .at ? ScheduleSheet.epochMilliseconds(date) : nil)
+        let routine = trigger == .at && repeats
+        let when = ScheduleWhen(trigger: trigger,
+                                at: trigger == .at && !routine ? ScheduleSheet.epochMilliseconds(date) : nil,
+                                cron: routine ? cron.trimmingCharacters(in: .whitespaces) : nil)
         Task {
             defer { saving = false }
             do {
@@ -245,9 +266,10 @@ struct EditScheduleSheet: View {
     let item: ScheduledItem
 
     var body: some View {
-        ScheduleSheet(title: "Edit schedule", confirmTitle: "Save", trigger: item.trigger, at: item.at) { when in
+        ScheduleSheet(title: "Edit schedule", confirmTitle: "Save", trigger: item.trigger, at: item.at, cron: item.cron) { when in
             _ = try await endpoint.updateSchedule(
-                item.id, SchedulePatch(trigger: when.trigger, at: when.at, expectedRevision: item.revision)
+                item.id, SchedulePatch(trigger: when.trigger, at: when.at, expectedRevision: item.revision,
+                                       cron: when.cron, stopsRecurrence: when.cron == nil && item.cron != nil)
             )
         }
     }

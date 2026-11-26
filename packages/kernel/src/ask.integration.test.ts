@@ -88,10 +88,6 @@ test("Ask uses bundled web and never executes personal, project, explicit or inl
 		join(f.source, ".pi", "mcp.json"),
 		JSON.stringify({ mcpServers: { evil: { command: "touch", args: [marker] } } }),
 	);
-	await writeFile(
-		join(f.agentDir, "mcp.json"),
-		JSON.stringify({ mcpServers: { evil: { command: "touch", args: [marker] } } }),
-	);
 	const packageDir = join(f.root, "evil-package");
 	await mkdir(packageDir);
 	await writeFile(

@@ -23,8 +23,8 @@ final class BranchSelectorState: ObservableObject {
 
     static func scope(project: Project?, mode: ChatMode, workspace: WorkspaceMode?) -> String? {
         guard let project else { return nil }
-        let effectiveWorkspace = workspace ?? (project.usesPrivateClones ? .clone : .direct)
-        guard mode == .ask || effectiveWorkspace == .clone else { return nil }
+        let effectiveWorkspace = workspace ?? project.defaultWorkspaceMode
+        guard mode == .ask || effectiveWorkspace.isIsolated else { return nil }
         return "\(project.id):\(project.path):\(mode.rawValue):\(mode == .ask ? "readonly" : effectiveWorkspace.rawValue)"
     }
 

@@ -45,6 +45,7 @@ import {
 	SourceRateLimited,
 	SourceSignInRequired,
 	SourceToolError,
+	validSourceArguments,
 } from "./source-mcp.ts";
 import {
 	refreshAssessment,
@@ -846,33 +847,27 @@ export class SourceRegistry {
 			limit,
 		});
 	}
-	/** Open tracked items the Inbox lists for a project, from cached counts: no disk read. */
+	/** Open tracked items the Inbox lists for a project, from cached counts: no disk read. Linear tickets live on
+	 * the Sprint page, so only Slack counts. */
 	inboxCount(projectId: string): number {
 		const project = this.projects.require(projectId);
 		const hidden = new Set(hiddenLabels(project));
 		let total = 0;
-		for (const kind of ["linear", "slack"] as const) {
+		for (const kind of ["slack"] as const) {
 			if (!this.synced(project, kind)) continue;
 			for (const [label, count] of Object.entries(this.items.inboxCounts(projectId, kind)))
 				if (!label || !hidden.has(label)) total += count;
 		}
 		return total;
 	}
-	/** Open tracked work of one project or every project, for the Inbox. A kind no project tracks is omitted. */
+	/** Open Slack work of one project or every project, for the Inbox. Linear tickets live on the Sprint page. */
 	async inbox(projectId: string | undefined, limit: number): Promise<Pick<Inbox, "linear" | "slack">> {
 		const projects = projectId ? [this.projects.require(projectId)] : this.projects.list();
-		const linear = projects.filter((project) => this.synced(project, "linear")).map((project) => project.id);
 		const slack = projects
 			.filter((project) => this.synced(project, "slack"))
 			.map((project) => ({ projectId: project.id, hidden: hiddenLabels(project) }));
-		const tracks = (kind: TrackedKind) => projects.some((project) => isConfigured(project, kind));
-		const result = await this.items.inbox({ linear, slack, limit });
-		return {
-			...(tracks("linear")
-				? { linear: { ...result.linear, items: this.withParents(result.linear.items, (item) => item.projectId) } }
-				: {}),
-			...(tracks("slack") ? { slack: result.slack } : {}),
-		};
+		const result = await this.items.inbox({ linear: [], slack, limit });
+		return projects.some((project) => isConfigured(project, "slack")) ? { slack: result.slack } : {};
 	}
 	/** Attach cached parent headers to Linear sub-issues. Headers live in each project's Linear checkpoint, so
 	 * this reads no disk and makes no source calls. */
@@ -902,6 +897,11 @@ export class SourceRegistry {
 		const checkpoint = this.items.checkpoint(`${project.id}:${kind}`);
 		return !checkpoint || checkpoint.configKey === configKey(project, kind);
 	}
+	/** One stored item, for callers that link work to it. */
+	requireItem(itemId: string): Promise<TrackedItem> {
+		return this.items.require(itemId);
+	}
+
 	async prefill(itemId: string): Promise<TrackedItemPrefill> {
 		if (this.stopped) throw new ServiceUnavailable("Tracking is stopped");
 		const existing = this.details.get(itemId);
@@ -1165,6 +1165,27 @@ export class SourceRegistry {
 		return promise;
 	}
 	/** Single durable attempt per Slack item, independent of how many chats or missions it starts. */
+	/**
+	 * Post the user's approved reply in a tracked Slack message's thread. Never called by an agent: only the user's
+	 * Send in the app reaches it.
+	 */
+	async replySlack(itemId: string, text: string): Promise<void> {
+		const item = await this.items.require(itemId);
+		if (item.kind !== "slack") throw new Error("Only Slack messages can be answered in Slack");
+		if (!slackStartAllowed(this.projects.require(item.projectId).tracking?.slackChannels ?? [], item))
+			throw new Conflict("This channel is no longer tracked");
+		const args = { channel_id: item.metadata.channel, thread_ts: item.metadata.thread_ts, message: text.trim() };
+		if (!validSourceArguments("replySlack", args))
+			throw new Error("Reply must be 1 to 4000 characters in a known thread");
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(new Error("Slack reply timed out")), 30_000);
+		try {
+			await this.mcp.call("slack", "replySlack", args, controller.signal);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+
 	startSlack(item: TrackedItem): Promise<void> {
 		if (item.kind !== "slack") return Promise.resolve();
 		const existing = this.starts.get(item.id);

@@ -2,12 +2,13 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Design tokens, after Berth's palette. Every colour follows the window's appearance (`Color(light:dark:)`):
+/// Design tokens, Theme v2 (docs/plans/pilot-a-ma-sauce.md): dense, calm and neutral, with one accent (`brand`).
+/// Every colour follows the window's appearance (`Color(light:dark:)`):
 ///
-/// - Light: white surfaces, a neutral-50 sidebar, 8% black hairlines, 4% black fills, neutral-800 text and dark
-///   primary buttons.
-/// - Dark: soft, low-contrast greys rather than near-black. A neutral-800 page over a slightly darker sidebar, lifted
-///   grey cards and trays, 8% white hairlines, 5% white fills, neutral-300 text and light primary buttons.
+/// - Light: white page, a cool grey sidebar, 8% black hairlines, 4% black fills, near-black text with a slight
+///   blue cast and dark primary buttons.
+/// - Dark: deep blue-greys. A near-black page over a slightly darker sidebar, lifted cards and trays, 8% white
+///   hairlines, 5% white fills, light grey text and light primary buttons.
 ///
 /// Views use these tokens instead of literal or system colours, so both appearances stay consistent. Signal fills
 /// (`info`, `success`, `warning`, `destructive`) keep one hue in both; text-weight colours lighten in dark.
@@ -17,11 +18,11 @@ enum Theme {
     /// Readable width of settings pages; wider settings windows center the page.
     static let settingsColumn: CGFloat = 680
 
-    static let background = Color(light: 0xFFFFFF, dark: 0x262626)
-    static let sidebar = Color(light: 0xFAFAFA, dark: 0x202020)
-    static let foreground = Color(light: 0x262626, dark: 0xD4D4D4)
-    static let mutedForeground = Color(light: 0x6B6B6B, dark: 0x9A9A9A)
-    static let faintForeground = Color(light: 0xA3A3A3, dark: 0x6B6B6B)
+    static let background = Color(light: 0xFFFFFF, dark: 0x15161A)
+    static let sidebar = Color(light: 0xF3F3F5, dark: 0x111215)
+    static let foreground = Color(light: 0x1C1D21, dark: 0xE8E8EC)
+    static let mutedForeground = Color(light: 0x5F616B, dark: 0xA0A2AD)
+    static let faintForeground = Color(light: 0x8F919B, dark: 0x6D6F7A)
     static let border = Color(light: .black.withAlphaComponent(0.08), dark: .white.withAlphaComponent(0.08))
     static let muted = Color(light: .black.withAlphaComponent(0.04), dark: .white.withAlphaComponent(0.05))
     static let selected = Color(light: .black.withAlphaComponent(0.06), dark: .white.withAlphaComponent(0.08))
@@ -29,14 +30,14 @@ enum Theme {
     /// message (`keyboardHighlight(_:)`). Fainter than hover and `selected`, never an outline, and shown only while
     /// the keyboard is navigating (`KeyboardCue`), so it never reads as selection or appears after a click.
     static let keyboardHighlight = Color(light: .black.withAlphaComponent(0.03), dark: .white.withAlphaComponent(0.04))
-    static let card = Color(light: 0xFFFFFF, dark: 0x303030)
+    static let card = Color(light: 0xFFFFFF, dark: 0x191A1F)
     /// Opaque tray behind composers. Holds the editor card and its controls.
-    static let tray = Color(light: 0xF5F5F5, dark: 0x2C2C2C)
-    static let code = Color(light: 0xFAFAFA, dark: 0x2C2C2C)
+    static let tray = Color(light: 0xF5F5F7, dark: 0x1D1E23)
+    static let code = Color(light: 0xF7F7F9, dark: 0x1A1B20)
     /// Fill of primary actions (the composers' send button, a ticked answer, a strong key cap).
-    static let primary = Color(light: 0x262626, dark: 0xD4D4D4)
+    static let primary = Color(light: 0x1C1D21, dark: 0xE8E8EC)
     /// Text and symbols drawn on `primary`.
-    static let onPrimary = Color(light: 0xFFFFFF, dark: 0x262626)
+    static let onPrimary = Color(light: 0xFFFFFF, dark: 0x15161A)
     /// Fill of a disabled primary action.
     static let disabledFill = Color(light: .black.withAlphaComponent(0.15), dark: .white.withAlphaComponent(0.15))
     /// Symbols drawn on `disabledFill`.
@@ -55,6 +56,10 @@ enum Theme {
     /// system accent like native list drops.
     static let dropIndicator = Color(nsColor: .controlAccentColor)
 
+    /// The app's single accent: the active tab underline, progress bars and the marker on items new since you
+    /// last looked (a new ticket in the sprint). Never a state colour; states keep amber, red and green.
+    static let brand = Color(light: 0x5B5BD6, dark: 0x8B8BF0)
+
     static let info = Color(hex: 0x3B82F6)
     static let success = Color(hex: 0x10B981)
     static let warning = Color(hex: 0xF59E0B)
@@ -62,7 +67,7 @@ enum Theme {
     /// Errors: failed loads, saves and lookups (`InlineProblem`'s triangle, an error's own text). Text-weight red,
     /// readable on the page. Errors never use `warning` or `blocked` amber, which stay for things the user can act on.
     static let error = Color(light: 0xDC2626, dark: 0xF87171)
-    /// Soft indigo for live work in the sidebar's dithered corners (`DitherCorner`). Distinct from the attention
+    /// Soft indigo for live work in the sidebar's status marks (`statusMark`). Distinct from the attention
     /// colors, so working rows read as activity without asking for the user.
     static let working = Color(light: 0x6366F1, dark: 0x818CF8)
     /// Deeper indigo for live work drawn as small marks, such as the lit dot of `EllipsisSpinner`, where the
@@ -107,6 +112,13 @@ enum Theme {
     private static let syntaxString = Color(light: 0x166534, dark: 0x86EFAC)
     private static let syntaxNumber = Color(light: 0x9A3412, dark: 0xFDBA74)
     private static let syntaxFunction = Color(light: 0x1D4ED8, dark: 0x93C5FD)
+
+    /// Row heights of the dense layout. `compact` for sidebar and menu rows, `list` for page list rows (Inbox,
+    /// Reviews, Today), whose second line, when present, grows the row instead.
+    enum Density {
+        static let compact: CGFloat = 28
+        static let list: CGFloat = 38
+    }
 
     /// Corner radii. Pick by what the shape is, not by its size, and use `RoundedRectangle(cornerRadius:)` with one
     /// of these rather than a literal.

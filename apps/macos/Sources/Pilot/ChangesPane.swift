@@ -50,6 +50,8 @@ struct ChangesPane: View {
     var isVisible = true
     @Environment(\.repositoryPollingVisible) private var windowVisible
     @State private var viewingFile: String?
+    @State private var openingPath = false
+    @State private var pathDraft = ""
     @StateObject private var model: ChangesModel
     @StateObject private var keyboardRows = KeyboardListState()
     init(session: SessionSummary, isVisible: Bool = true) {
@@ -100,11 +102,41 @@ struct ChangesPane: View {
             }
         }, trailing: {
             if model.loading { ProgressView().controlSize(.mini) }
+            Button { openingPath = true } label: { PilotSymbol(PilotIcon.document, context: .toolbar) }
+                .buttonStyle(QuietIconButtonStyle())
+                .help("Open a file by path")
+                .accessibilityLabel("Open file by path")
+                .popover(isPresented: $openingPath, arrowEdge: .bottom) { openFilePopover }
             Button { Task { await model.load(client: endpoint) } } label: { PilotSymbol(PilotIcon.refresh, context: .toolbar) }
                 .buttonStyle(QuietIconButtonStyle())
                 .help("Refresh")
                 .accessibilityLabel("Refresh changes")
         })
+    }
+
+    /// Read-only entry to any file in the task workspace, reusing the existing file sheet.
+    private var openFilePopover: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Open file by path").font(.pilot(.body))
+            Text("Relative to the task workspace root.").font(.pilot(.caption)).foregroundStyle(Theme.mutedForeground)
+            TextField("src/example.ts", text: $pathDraft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 320)
+                .onSubmit(openDraftPath)
+            HStack {
+                Spacer()
+                Button("Open", action: openDraftPath)
+                    .disabled(pathDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(12)
+    }
+
+    private func openDraftPath() {
+        let trimmed = pathDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        openingPath = false
+        DispatchQueue.main.async { viewingFile = trimmed }
     }
 
     @ViewBuilder private var content: some View {
@@ -128,7 +160,11 @@ struct ChangesPane: View {
                         .contextMenu { Button("View file") { viewingFile = file.path } }
                         .keyboardListItem(file.path) { toggle(file.path) }
                         if model.expanded.contains(file.path), let diff = model.diffs[file.path] {
-                            DiffView(file: diff)
+                            DiffView(file: diff, onComment: session.isReadOnlyHistory || session.isAsk ? nil : { line, comment in
+                                try await endpoint.send(session.id,
+                                                        message: DiffView.commentMessage(path: diff.path, line: line, comment: comment),
+                                                        mode: .followUp)
+                            })
                                 .padding(.vertical, 4)
                                 .background(Theme.code)
                         }
@@ -237,6 +273,8 @@ struct ChangesRepositoryContext: View {
                 AttachPullRequestButton(session: session)
                     .padding(.horizontal, 8)
             }
+            PullRequestActionsBar(session: session)
+                .padding(.horizontal, 8)
             if session.linkedPullRequests.isEmpty, session.pullRequestError != nil {
                 // Lookup failures without a cached PR.
                 PullRequestBadge(session: session, presentation: .details)

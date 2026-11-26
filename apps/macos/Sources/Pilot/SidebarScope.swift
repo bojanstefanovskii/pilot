@@ -181,8 +181,45 @@ struct SidebarHeader: View {
                 }
             }
             .animation(Theme.Motion.quick, value: needsYou > 0)
-            SidebarNavRow(title: "Usage", icon: .activity, selected: model.showingUsage,
-                          help: "Observed Local usage", action: { model.showUsage() }) { EmptyView() }
+            SidebarSectionLabel("Work")
+            SidebarNavRow(title: "Today", icon: PilotIcon.todo, selected: model.workflowPage == .today,
+                          help: "Your day, planned by the Today routines", height: Self.tabHeight,
+                          action: { model.showWorkflow(.today) }) { EmptyView() }
+            SidebarNavRow(title: "Chats", icon: PilotIcon.compose, selected: model.workflowPage == .chats,
+                          help: "Free chats on the current checkout: questions, bugs, small requests", height: Self.tabHeight,
+                          action: { model.showWorkflow(.chats) }) { attention(freeChatsNeedingYou) }
+            SidebarNavRow(title: "Sprint", icon: PilotIcon.linearIssue, selected: model.workflowPage == .sprint,
+                          help: "The current Linear cycle with each ticket's chat", height: Self.tabHeight,
+                          action: { model.showWorkflow(.sprint) }) { EmptyView() }
+            SidebarNavRow(title: "Pull requests", icon: PilotIcon.pullRequest, selected: model.workflowPage == .pullRequests,
+                          help: "Your PRs: what needs you, what is open, what merged", height: Self.tabHeight,
+                          action: { model.showWorkflow(.pullRequests) }) { attention(model.pullRequestsNeedingYou.values.reduce(0, +)) }
+            SidebarNavRow(title: "Reviews", icon: PilotIcon.pullRequest, selected: model.workflowPage == .reviews,
+                          help: "Pull requests waiting on your review", height: Self.tabHeight,
+                          action: { model.showWorkflow(.reviews) }) { EmptyView() }
+            SidebarSectionLabel("In progress")
+            SidebarNavRow(title: "Missions", icon: PilotIcon.mission, selected: model.workflowPage == .missions,
+                          help: "Missions in progress, as cards", height: Self.tabHeight,
+                          action: { model.showWorkflow(.missions) }) { attention(missionsNeedingYou) }
+            SidebarNavRow(title: "Features", icon: PilotIcon.buildMode, selected: model.workflowPage == .features,
+                          help: "Feature chats in progress, as cards", height: Self.tabHeight,
+                          action: { model.showWorkflow(.features) }) { attention(chatsNeedingYou(quick: false)) }
+            SidebarNavRow(title: "Quick fixes", icon: PilotIcon.bug, selected: model.workflowPage == .quickFixes,
+                          help: "Quick fix chats in progress, as cards", height: Self.tabHeight,
+                          action: { model.showWorkflow(.quickFixes) }) { attention(chatsNeedingYou(quick: true)) }
+            SidebarSectionLabel("Tools")
+            SidebarNavRow(title: "Notes", icon: PilotIcon.document, selected: model.workflowPage == .notes,
+                          help: "Your notes, cheat codes, artifacts and files", height: Self.tabHeight,
+                          action: { model.showWorkflow(.notes) }) { EmptyView() }
+            SidebarNavRow(title: "Routines", icon: PilotIcon.pending, selected: model.workflowPage == .routines,
+                          help: "Recurring routines and scheduled chats", height: Self.tabHeight,
+                          action: { model.showWorkflow(.routines) }) { attention(failedRoutines) }
+            SidebarNavRow(title: "Database", icon: PilotIcon.terminal, selected: model.workflowPage == .database,
+                          help: "Read-only SQL on a project's databases", height: Self.tabHeight,
+                          action: { model.showWorkflow(.database) }) { EmptyView() }
+            SidebarNavRow(title: "Usage", icon: .activity, selected: model.showingUsage && model.workflowPage == nil,
+                          help: "Observed Local usage", height: Self.tabHeight,
+                          action: { model.showUsage() }) { EmptyView() }
             SidebarProjectSelector(model: model, counts: counts, archivedCount: archivedCount,
                                    folderEditor: folderEditor)
                 .padding(.top, 8)
@@ -194,7 +231,56 @@ struct SidebarHeader: View {
                 .padding(.top, 2)
             }
         }
+        .task(id: client.projects.map(\.id)) { await refreshPullRequestBadges() }
     }
+
+    /// Refreshes the Pull requests badge every five minutes, one GitHub read per branch-backed project.
+    func refreshPullRequestBadges() async {
+        while !Task.isCancelled {
+            for project in client.projects where project.workspace != "direct" {
+                if let prs = try? await client.myPullRequests(projectId: project.id) {
+                    model.pullRequestsNeedingYou[project.id] = prs.filter(\.needsYou).count
+                }
+            }
+            try? await Task.sleep(for: .seconds(300))
+        }
+    }
+
+    /// Workflow tabs are taller than list rows: the sidebar is navigation now, chats live in their pages.
+    static let tabHeight: CGFloat = 34
+
+    @ViewBuilder private func attention(_ count: Int) -> some View {
+        if count > 0 {
+            CountBadge(count: count, style: .attention)
+                .padding(.trailing, 6)
+                .transition(.scale.combined(with: .opacity))
+        }
+    }
+
+    /// Mission work that waits on the user: blocked tasks and open agent questions.
+    private var missionsNeedingYou: Int {
+        client.missions.filter { $0.archivedAt == nil && $0.completedAt == nil }.reduce(0) { $0 + ($1.needsYouCount ?? 0) }
+    }
+
+    /// Build chats of one kind, outside missions, that need the user or failed.
+    private func chatsNeedingYou(quick: Bool) -> Int {
+        client.sessions.filter { session in
+            guard !session.isArchived, session.projectId != nil, !session.isAsk, session.missionId == nil,
+                  !session.isMissionCoordinator, !ChatsPage.isFree(session), (session.kind == .quick) == quick else { return false }
+            let signal = session.signal(unread: model.isUnread(session))
+            return signal == .needsYou || signal == .failed
+        }.count
+    }
+
+    private var freeChatsNeedingYou: Int {
+        client.sessions.filter { session in
+            guard ChatsPage.isFree(session) else { return false }
+            let signal = session.signal(unread: model.isUnread(session))
+            return signal == .needsYou || signal == .failed
+        }.count
+    }
+
+    private var failedRoutines: Int { client.schedules.filter { $0.state == .failed || ($0.cron != nil && $0.error != nil) }.count }
 
     private func composeButton(project: Project?) -> some View {
         Menu {
@@ -217,6 +303,22 @@ struct SidebarHeader: View {
     }
 }
 
+/// A quiet group heading between sidebar tabs.
+struct SidebarSectionLabel: View {
+    let title: String
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title)
+            .font(.pilot(.caption, weight: .medium))
+            .foregroundStyle(Theme.faintForeground)
+            .padding(.leading, 8)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// One navigation row at the top of the sidebar (Home, Inbox, Overview): a symbol, a title and an optional trailing
 /// accessory such as a badge or button. Hover and selection use the sidebar's selection fill.
 struct SidebarNavRow<Accessory: View>: View {
@@ -227,6 +329,7 @@ struct SidebarNavRow<Accessory: View>: View {
     var accessibilityDetail: String?
     /// Non-nil when a parent list owns keyboard focus. Buttons are not extra Tab stops.
     var parentFocused: Bool? = nil
+    var height: CGFloat = 28
     let action: () -> Void
     @ViewBuilder var accessory: () -> Accessory
     @State private var hovered = false
@@ -256,7 +359,7 @@ struct SidebarNavRow<Accessory: View>: View {
         }
         .padding(.leading, 8)
         .padding(.trailing, 2)
-        .frame(height: 28)
+        .frame(height: height)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.row).fill(selected || hovered ? Theme.selected : .clear))
         .onHover { hovered = $0 }
         .animation(Theme.Motion.quick, value: hovered)

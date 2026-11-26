@@ -135,13 +135,14 @@ export class ModelCatalog {
 	): Promise<(text: string) => Promise<SlackClassification>> {
 		const runtime = await this.getRuntime();
 		const { models } = await this.scoped(cwd, signal);
-		// Reuse title-price selection within the explicitly required classifier model's project scope.
-		// No fallback outside scope or to a working chat's expensive model.
-		const model = cheapestTitleModel(
-			models
-				.map(({ model }) => model)
-				.filter((model) => model.provider === "openai-codex" && model.id === "gpt-6-luna"),
-		);
+		// Prefer the dedicated classifier model; otherwise the cheapest model in the project's scope, as titles use.
+		// Never a model outside the scope.
+		const scoped = models.map(({ model }) => model);
+		const model =
+			cheapestTitleModel(scoped.filter((model) => model.provider === "openai-codex" && model.id === "gpt-6-luna")) ??
+			cheapestTitleModel(scoped);
+		// The strict JSON response format is an OpenAI Responses field; other providers get the prompt contract only.
+		const openai = model?.provider === "openai-codex" || model?.provider === "openai";
 		signal.throwIfAborted();
 		if (!model) throw new SlackModelUnavailable();
 		return async (text) => {
@@ -169,26 +170,29 @@ export class ModelCatalog {
 					maxTokens: 256,
 					maxRetries: 0,
 					signal,
-					onPayload: (payload) => ({
-						...(payload as Record<string, unknown>),
-						text: {
-							format: {
-								type: "json_schema",
-								name: "slack_message",
-								strict: true,
-								schema: {
-									...SLACK_CLASSIFICATION_SCHEMA,
-									properties: {
-										...SLACK_CLASSIFICATION_SCHEMA.properties,
-										label: {
-											type: ["string", "null"],
-											enum: [...context.labels.map((label) => label.name), null],
+					onPayload: (payload) =>
+						openai
+							? {
+									...(payload as Record<string, unknown>),
+									text: {
+										format: {
+											type: "json_schema",
+											name: "slack_message",
+											strict: true,
+											schema: {
+												...SLACK_CLASSIFICATION_SCHEMA,
+												properties: {
+													...SLACK_CLASSIFICATION_SCHEMA.properties,
+													label: {
+														type: ["string", "null"],
+														enum: [...context.labels.map((label) => label.name), null],
+													},
+												},
+											},
 										},
 									},
-								},
-							},
-						},
-					}),
+								}
+							: payload,
 				},
 			);
 			signal.throwIfAborted();

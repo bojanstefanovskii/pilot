@@ -57,6 +57,8 @@ import { TrackedItemStore } from "./tracked-items.ts";
 import { TriageGroomer, workerTriage } from "./triage-grooming.ts";
 import { untrackedStats } from "./untracked-stats.ts";
 import { UsageHistoryStore } from "./usage-history.ts";
+import { TodayStore } from "./today.ts";
+import { trackedItemLinker } from "./work-starter.ts";
 
 const config = loadConfig();
 await migratePilotConfig(config.agentDir ?? getAgentDir());
@@ -202,6 +204,7 @@ const legacyUpdateFrozen = process.platform === "linux" && (await legacyRuntimeU
 sessions.setProjectMemory(memory);
 sessions.setMcpStatus(mcpStatus);
 sessions.setPullRequestObserver((observation) => trackedItems.observeSlackPullRequests(observation));
+sessions.setToday(new TodayStore(config.home));
 sessions.setSlackStatus({
 	call: (sessionId, args) => {
 		const { status, reason } = args;
@@ -301,7 +304,7 @@ const schedules = new ScheduleService(scheduleStore, {
 	sessions,
 	projects,
 	missions: missionStore,
-	trackedItems,
+	trackedItems: trackedItemLinker(trackedItems, tracking),
 	triggers: scheduleDetection,
 });
 await schedules.load();

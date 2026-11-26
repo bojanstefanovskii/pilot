@@ -228,6 +228,23 @@ struct ArtifactViewer: View {
     }
 }
 
+/// The artifact viewer embedded in a page instead of a sheet: it fills its container, and Close clears the selection.
+struct InlineArtifactViewer: View {
+    let reference: ArtifactReference
+    let close: () -> Void
+    @StateObject private var state = ArtifactViewState()
+    @StateObject private var render = ArtifactRenderState()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ArtifactViewerHeader(reference: reference, latest: true, state: state, render: render, close: close)
+            Divider()
+            ArtifactContent(reference: reference, latest: true, state: state, render: render)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct ArtifactViewerHeader: View {
     @Environment(\.hostViewContext) private var hostContext
     @EndpointClient private var endpoint

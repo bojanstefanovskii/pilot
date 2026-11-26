@@ -242,6 +242,8 @@ export function runKernelWorker(): void {
 		callDaemon<JsonValue>((callId) => ({ type: "database.call", callId, action, args }));
 	const callSlackStatus: SlackStatusCall = (args) =>
 		callDaemon<JsonValue>((callId) => ({ type: "slack.call", callId, args }));
+	const callToday: import("./today-tool.ts").TodayCall = (args) =>
+		callDaemon<JsonValue>((callId) => ({ type: "today.call", callId, args }));
 	const callDiagnostics: DiagnosticsCall = (sessionId, limit) =>
 		callDaemon((callId) => ({
 			type: "diagnostics.call",
@@ -430,6 +432,7 @@ export function runKernelWorker(): void {
 			command.type === "memory.result" ||
 			command.type === "database.result" ||
 			command.type === "slack.result" ||
+			command.type === "today.result" ||
 			command.type === "diagnostics.result" ||
 			command.type === "diagnostics.context.result" ||
 			command.type === "diagnostics.history.result" ||
@@ -548,6 +551,7 @@ export function runKernelWorker(): void {
 					callMemory,
 					callDatabase,
 					callSlackStatus,
+					callToday,
 					callDiagnostics,
 					callDiagnosticHistory,
 					callDiagnosticContext,

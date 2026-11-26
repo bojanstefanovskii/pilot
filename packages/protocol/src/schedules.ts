@@ -1,6 +1,9 @@
 import type { SpawnRequest } from "./index.ts";
 
-/** on_back is sleep after save/edit, then a full wake followed by reachability ("When I'm back"). All triggers are one-shot. */
+/**
+ * on_back is sleep after save/edit, then a full wake followed by reachability ("When I'm back"). Triggers are
+ * one-shot, except an `at` trigger with a `cron` recurrence, which re-arms at its next time after each run.
+ */
 export type ScheduleTrigger = "at" | "on_wake" | "on_online" | "on_back";
 export type ScheduleTarget =
 	| {
@@ -16,8 +19,10 @@ export type ScheduleState = "pending" | "dispatching" | "fired" | "failed" | "ca
 export interface ScheduleRequest {
 	title?: string;
 	trigger?: ScheduleTrigger;
-	/** Epoch milliseconds. Required only for at; overdue times fire when online. */
+	/** Epoch milliseconds. Required only for at; overdue times fire when online. Defaults to the cron's next time. */
 	at?: number;
+	/** Five-field cron in local time (minute hour day month weekday), for a recurring routine. Implies trigger at. */
+	cron?: string;
 	target: ScheduleTarget;
 }
 /** PATCH /api/schedules/:id. Only pending items are editable. Target replacement is complete. */
@@ -25,6 +30,8 @@ export interface SchedulePatch {
 	title?: string;
 	trigger?: ScheduleTrigger;
 	at?: number;
+	/** null stops the recurrence. */
+	cron?: string | null;
 	target?: ScheduleTarget;
 	/** Optional optimistic concurrency guard against a stale editor. */
 	expectedRevision?: number;
@@ -37,6 +44,10 @@ export interface ScheduledItem {
 	/** Removed triggers are a non-executable tombstone on cancelled records. */
 	trigger: ScheduleTrigger | "removed";
 	at?: number;
+	/** Recurring routine: stays pending, with `at` its next run. `firedAt`, `sessionId` and `error` describe the last. */
+	cron?: string;
+	/** Completed runs of a recurring routine. */
+	runs?: number;
 	target: ScheduleTarget;
 	state: ScheduleState;
 	createdAt: number;

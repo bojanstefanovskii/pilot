@@ -17,7 +17,7 @@ struct RowLine: View {
     /// then plain text and the row's context menu opens it.
     var openMission: ((String) -> Void)?
 
-    /// Trailing room a sidebar row's second line leaves for its dithered corner. The corner keeps a fixed size at
+    /// Trailing room a sidebar row's second line leaves for its status mark. The corner keeps a fixed size at
     /// every sidebar width, so this is a constant measured from renders at 230, 280 and 400 pt: the line's
     /// fade sits over the corner's sparse edge, and full-opacity text stops where fewer than a quarter of the
     /// corner's cells are drawn.

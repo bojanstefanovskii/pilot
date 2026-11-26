@@ -2,7 +2,7 @@ import PilotCore
 import SwiftUI
 
 /// A mission in the sidebar. Missions are not chats: the row summarises the mission (progress and the most
-/// urgent state of its chats, as a dithered corner) and opens the mission page. Its chats are listed in the
+/// urgent state of its chats, as a status mark) and opens the mission page. Its chats are listed in the
 /// chat groups like any other chat. The needs-you badge is always visible; the coordinator and new-chat actions
 /// appear on hover, in space the row always reserves, while the corner recedes from under them. Selection is the
 /// row's only fill.
@@ -82,7 +82,7 @@ struct MissionSidebarRow: View {
         .padding(.trailing, 16)
         .padding(.vertical, 3)
         .padding(.leading, 4)
-        .ditherCorner(signal, background: waitingOnJobs, outset: EdgeInsets(), cornerRadius: Theme.Radius.row)
+        .statusMark(signal, background: waitingOnJobs)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.row).fill(selected ? Theme.selected : Color.clear))
         .onHover { hovered = $0 }
         .animation(Theme.Motion.quick, value: hovered)

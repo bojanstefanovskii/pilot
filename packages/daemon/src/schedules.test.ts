@@ -685,3 +685,38 @@ test("a legacy kernel-wake latch is not evidence of sleep or a full wake", async
 	assert.equal(f.service.require(item.id).wakeObserved, undefined);
 	assert.equal(f.calls.length, 0);
 });
+
+test("a cron routine fires, re-arms at its next time, and keeps its last outcome", async (t) => {
+	const f = await fixture(t, true);
+	const start = new Date(2026, 10, 27, 8, 59).getTime();
+	f.clock.time = start;
+	const routine = await f.service.create({
+		cron: "0 9 * * *",
+		target: { kind: "message", sessionId: "existing", message: "daily digest" },
+	});
+	assert.equal(routine.trigger, "at");
+	assert.equal(routine.at, new Date(2026, 10, 27, 9, 0).getTime());
+	f.clock.advance(60_000);
+	await f.settle();
+	let current = f.service.require(routine.id);
+	assert.equal(current.state, "pending");
+	assert.equal(current.runs, 1);
+	assert.equal(current.at, new Date(2026, 10, 28, 9, 0).getTime());
+	assert.equal(f.calls.at(-1)?.requestId, `schedule:${routine.id}:0`);
+
+	f.fail(new Error("chat busy"));
+	f.clock.time = new Date(2026, 10, 28, 9, 0).getTime();
+	await f.settle();
+	current = f.service.require(routine.id);
+	assert.equal(current.state, "pending", "a failed run does not stop the routine");
+	assert.equal(current.error, "chat busy");
+	assert.equal(current.runs, 2);
+	assert.equal(f.calls.at(-1)?.requestId, `schedule:${routine.id}:1`);
+
+	const stopped = await f.service.update(routine.id, { cron: null, trigger: "on_back" });
+	assert.equal(stopped.cron, undefined);
+	await assert.rejects(
+		f.service.create({ cron: "every day", target: { kind: "message", sessionId: "existing", message: "x" } }),
+		/5 fields/,
+	);
+});

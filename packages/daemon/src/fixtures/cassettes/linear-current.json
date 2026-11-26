@@ -118,7 +118,10 @@
 						"cycleId",
 						"gitBranchName",
 						"parentId",
-						"updatedAt"
+						"updatedAt",
+						"project",
+						"labels",
+						"createdAt"
 					]
 				}
 			},
@@ -170,7 +173,10 @@
 						"cycleId",
 						"gitBranchName",
 						"parentId",
-						"updatedAt"
+						"updatedAt",
+						"project",
+						"labels",
+						"createdAt"
 					]
 				}
 			},

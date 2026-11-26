@@ -95,9 +95,7 @@ let package = Package(
             path: "Sources/Pilot",
             resources: [.copy("Resources/Octicons-LICENSE.txt"), .copy("Resources/OpenTelemetry-LICENSE.txt"),
                         .copy("Resources/OpenTelemetry-NOTICE.txt"),
-                        .copy("Resources/CoastScene.png"),
-                        .copy("Resources/HomeSky.png"), .copy("Resources/HomeSkyNight.png"),
-                        .copy("Resources/HomeScenes-CREDITS.txt"), .copy("Resources/MermaidKit-LICENSE.txt")],
+                        .copy("Resources/MermaidKit-LICENSE.txt")],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .testTarget(name: "PilotCoreTests", dependencies: ["PilotCore"], path: "Tests/PilotCoreTests"),

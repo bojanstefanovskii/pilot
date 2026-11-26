@@ -2,12 +2,19 @@
  * Isolate the pinned internal compatibility boundary here, as the kernel does for transport injection.
  * Reuse pi's validation, env/command expansion, auth file locks and refresh logic, never copy tokens.
  */
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parentPort, workerData } from "node:worker_threads";
 import type { LoadedMcpConfig, McpServerEntry, McpTransportFactory } from "@earendil-works/pi-coding-agent";
 import { installCredentialBrokerHooks } from "@pilot/kernel/credential-hooks";
 import { getPilotConfigDir } from "./config.ts";
 import { slackReactionUser } from "./slack-reaction-owner.ts";
+import {
+	callUnifiedSlack,
+	UNIFIED_SLACK_LOGICAL,
+	UNIFIED_SLACK_TOOLS,
+	type UnifiedSlackTool,
+} from "./slack-unified.ts";
 import {
 	loadSlackRemovalRoute,
 	slackRemovalCall,
@@ -91,95 +98,138 @@ try {
 	const removal = kind === "slack" && logicalTool === "removeSlackEyes";
 	const agentDir = workerData.agentDir ?? paths.getAgentDir();
 	const configDir = workerData.configDir ?? getPilotConfigDir();
-	const removalConfig = removal
-		? await loadSlackRemovalRoute(configDir).catch(() => {
-				throw new SetupError("Slack eyes removal route is unconfigured or invalid");
-			})
-		: undefined;
-	if (removalConfig?.enabled === false) throw new SetupError("Slack eyes removal is disabled");
-	const route = removalConfig ? slackRemovalCall(removalConfig, args.channel_id, args.message_ts) : undefined;
-	const name = route?.tool ?? dedicatedSourceTool(kind, logicalTool);
-	if (!name) throw new SetupError("Unknown dedicated MCP source tool");
-	// Local user config only. A repository cannot supply an executable removal route.
-	// Removal is entirely daemon-owned: do not load mcp.json or register its tools with agents.
-	const entry: McpServerEntry | undefined = route
-		? {
-				name: "pilot-slack-removal",
-				source: join(configDir, TRACKING_CONFIG_FILE),
-				config: { type: "http", ...route.server },
-			}
-		: config
-				.loadMcpConfig({ agentDir, cwd: agentDir, projectTrusted: false })
-				.servers.find((entry) => entry.name === kind);
-	if (!entry) throw new SetupError("Dedicated MCP server is not configured in pi");
-	if (entry.config.enabled === false) throw new SetupError("MCP server is disabled or hidden");
-	if (config.getMcpToolExposure(entry.config, name) === "hidden") throw new SetupError("MCP tool is hidden");
-	if ("url" in entry.config && entry.config.auth)
-		throw new SetupError("Tracking requires MCP OAuth or configured headers, not a model provider login");
-	connection = new runtime.McpServerConnection({
-		entry,
-		cwd: agentDir,
-		createTransport: runtime.createDefaultTransport,
-		// Explicit Bearer configuration needs no OAuth store and must never fall back to one.
-		credentials: removal
-			? undefined
-			: new runtime.McpOAuthCredentialStore(
-					new auth.FileAuthStorageBackend(join(agentDir, "mcp-auth.json")),
-					agentDir,
-				),
-		onTools: () => {},
-	});
-	if (controller.signal.aborted) throw controller.signal.reason;
-	await connection.getClient();
-	const tool = connection.tools.find((tool) => tool.name === name);
 	if (
-		!tool ||
-		(!removal &&
-			logicalTool !== "startIssue" &&
-			logicalTool !== "startSlack" &&
-			logicalTool !== "doneSlack" &&
-			(tool.annotations?.readOnlyHint === false || tool.annotations?.destructiveHint === true))
-	)
-		throw new SetupError("Tracking tool is missing or advertises writes");
-	const options = { signal: controller.signal, timeoutMs: 30_000 };
-	if (removalConfig) {
-		if (!removalConfig.identityTool) throw new SlackRemovalError("identity_unverified");
-		const identity = slackRouteCall(removalConfig, removalConfig.identityTool, {});
-		if (!connection.tools.some((tool) => tool.name === identity.tool))
-			throw new SlackRemovalError("identity_unverified");
-		const user = slackReactionUser(decodeMcpResult(await connection.callTool(identity.tool, identity.args, options)));
-		if (!user) throw new SlackRemovalError("identity_unverified");
-		if (user !== args.user_id) throw new SlackRemovalError("identity_mismatch");
-	}
-	let userId: string | undefined;
-	if (kind === "slack" && logicalTool === "startSlack") {
-		// Same credential/connection as the write. Identity failure must not prevent starting work.
-		const profile = connection.tools.find((tool) => tool.name === "slack_read_user_profile");
+		kind === "slack" &&
+		!removal &&
+		(UNIFIED_SLACK_LOGICAL as readonly string[]).includes(logicalTool) &&
+		slackViaUnified(agentDir)
+	) {
+		// No dedicated Slack login, but the Stoik unified MCP is signed in: same tracking, through CALL_TOOL.
+		const unified = config
+			.loadMcpConfig({ agentDir, cwd: agentDir, projectTrusted: false })
+			.servers.find((entry) => entry.name === "unified-mcp");
+		if (!unified || unified.config.enabled === false) throw new SetupError("unified-mcp is not configured in pi");
+		connection = new runtime.McpServerConnection({
+			entry: unified,
+			cwd: agentDir,
+			createTransport: runtime.createDefaultTransport,
+			credentials: new runtime.McpOAuthCredentialStore(
+				new auth.FileAuthStorageBackend(join(agentDir, "mcp-auth.json")),
+				agentDir,
+			),
+			onTools: () => {},
+		});
+		if (controller.signal.aborted) throw controller.signal.reason;
+		await connection.getClient();
+		if (!connection.tools.some((tool) => tool.name === "CALL_TOOL"))
+			throw new SetupError("unified-mcp has no CALL_TOOL");
+		const options = { signal: controller.signal, timeoutMs: 30_000 };
+		const live = connection;
+		let value: ReturnType<typeof decodeMcpResult>;
+		try {
+			const out = await callUnifiedSlack(logicalTool, args, (inner: UnifiedSlackTool, innerArgs) => {
+				if (!UNIFIED_SLACK_TOOLS.includes(inner)) throw new SetupError("Slack tool not allowed");
+				return live.callTool("CALL_TOOL", { name: inner, arguments: innerArgs }, options);
+			});
+			value = out.result ? decodeMcpResult(out.result, logicalTool) : out.value!;
+		} catch (error) {
+			if (!["startSlack", "doneSlack"].includes(logicalTool) || !slackAlreadyReacted(error)) throw error;
+			value = { ok: true };
+		}
+		reply = { value };
+	} else {
+		const removalConfig = removal
+			? await loadSlackRemovalRoute(configDir).catch(() => {
+					throw new SetupError("Slack eyes removal route is unconfigured or invalid");
+				})
+			: undefined;
+		if (removalConfig?.enabled === false) throw new SetupError("Slack eyes removal is disabled");
+		const route = removalConfig ? slackRemovalCall(removalConfig, args.channel_id, args.message_ts) : undefined;
+		const name = route?.tool ?? dedicatedSourceTool(kind, logicalTool);
+		if (!name) throw new SetupError("Unknown dedicated MCP source tool");
+		// Local user config only. A repository cannot supply an executable removal route.
+		// Removal is entirely daemon-owned: do not load mcp.json or register its tools with agents.
+		const entry: McpServerEntry | undefined = route
+			? {
+					name: "pilot-slack-removal",
+					source: join(configDir, TRACKING_CONFIG_FILE),
+					config: { type: "http", ...route.server },
+				}
+			: config
+					.loadMcpConfig({ agentDir, cwd: agentDir, projectTrusted: false })
+					.servers.find((entry) => entry.name === kind);
+		if (!entry) throw new SetupError("Dedicated MCP server is not configured in pi");
+		if (entry.config.enabled === false) throw new SetupError("MCP server is disabled or hidden");
+		if (config.getMcpToolExposure(entry.config, name) === "hidden") throw new SetupError("MCP tool is hidden");
+		if ("url" in entry.config && entry.config.auth)
+			throw new SetupError("Tracking requires MCP OAuth or configured headers, not a model provider login");
+		connection = new runtime.McpServerConnection({
+			entry,
+			cwd: agentDir,
+			createTransport: runtime.createDefaultTransport,
+			// Explicit Bearer configuration needs no OAuth store and must never fall back to one.
+			credentials: removal
+				? undefined
+				: new runtime.McpOAuthCredentialStore(
+						new auth.FileAuthStorageBackend(join(agentDir, "mcp-auth.json")),
+						agentDir,
+					),
+			onTools: () => {},
+		});
+		if (controller.signal.aborted) throw controller.signal.reason;
+		await connection.getClient();
+		const tool = connection.tools.find((tool) => tool.name === name);
 		if (
-			profile &&
-			config.getMcpToolExposure(entry.config, profile.name) !== "hidden" &&
-			profile.annotations?.readOnlyHint !== false &&
-			profile.annotations?.destructiveHint !== true
-		) {
-			try {
-				userId = slackReactionUser(
-					decodeMcpResult(await connection.callTool(profile.name, { response_format: "detailed" }, options)),
-				);
-			} catch {
-				/* Done will truthfully report ownership as unverified. */
+			!tool ||
+			(!removal &&
+				logicalTool !== "startIssue" &&
+				logicalTool !== "startSlack" &&
+				logicalTool !== "doneSlack" &&
+				(tool.annotations?.readOnlyHint === false || tool.annotations?.destructiveHint === true))
+		)
+			throw new SetupError("Tracking tool is missing or advertises writes");
+		const options = { signal: controller.signal, timeoutMs: 30_000 };
+		if (removalConfig) {
+			if (!removalConfig.identityTool) throw new SlackRemovalError("identity_unverified");
+			const identity = slackRouteCall(removalConfig, removalConfig.identityTool, {});
+			if (!connection.tools.some((tool) => tool.name === identity.tool))
+				throw new SlackRemovalError("identity_unverified");
+			const user = slackReactionUser(
+				decodeMcpResult(await connection.callTool(identity.tool, identity.args, options)),
+			);
+			if (!user) throw new SlackRemovalError("identity_unverified");
+			if (user !== args.user_id) throw new SlackRemovalError("identity_mismatch");
+		}
+		let userId: string | undefined;
+		if (kind === "slack" && logicalTool === "startSlack") {
+			// Same credential/connection as the write. Identity failure must not prevent starting work.
+			const profile = connection.tools.find((tool) => tool.name === "slack_read_user_profile");
+			if (
+				profile &&
+				config.getMcpToolExposure(entry.config, profile.name) !== "hidden" &&
+				profile.annotations?.readOnlyHint !== false &&
+				profile.annotations?.destructiveHint !== true
+			) {
+				try {
+					userId = slackReactionUser(
+						decodeMcpResult(await connection.callTool(profile.name, { response_format: "detailed" }, options)),
+					);
+				} catch {
+					/* Done will truthfully report ownership as unverified. */
+				}
 			}
 		}
+		controller.signal.throwIfAborted();
+		let value: ReturnType<typeof decodeMcpResult>;
+		try {
+			value = decodeMcpResult(await connection.callTool(name, route?.args ?? args, options), logicalTool);
+		} catch (error) {
+			if (kind !== "slack" || !["startSlack", "doneSlack"].includes(logicalTool) || !slackAlreadyReacted(error))
+				throw error;
+			value = { ok: true };
+		}
+		reply = { value: userId ? { ok: true, userId } : value };
 	}
-	controller.signal.throwIfAborted();
-	let value: ReturnType<typeof decodeMcpResult>;
-	try {
-		value = decodeMcpResult(await connection.callTool(name, route?.args ?? args, options), logicalTool);
-	} catch (error) {
-		if (kind !== "slack" || !["startSlack", "doneSlack"].includes(logicalTool) || !slackAlreadyReacted(error))
-			throw error;
-		value = { ok: true };
-	}
-	reply = { value: userId ? { ok: true, userId } : value };
 } catch (error) {
 	const limited = error instanceof SourceRateLimited ? error : sourceRateLimit(error);
 	const category = error instanceof SourceToolError ? error.category : sourceToolFailure(error);
@@ -219,3 +269,22 @@ try {
 }
 parentPort!.postMessage(reply);
 parentPort!.close();
+
+/** Slack goes through unified-mcp when pi has no dedicated Slack login but unified-mcp is signed in.
+ * PILOT_SLACK_SOURCE=unified|slack forces one. Only token presence is read, never a token. */
+function slackViaUnified(agentDir: string): boolean {
+	const forced = process.env.PILOT_SLACK_SOURCE;
+	if (forced === "unified") return true;
+	if (forced === "slack") return false;
+	try {
+		const stored = JSON.parse(readFileSync(join(agentDir, "mcp-auth.json"), "utf8")) as Record<
+			string,
+			{ tokens?: unknown }
+		>;
+		const signedIn = (prefix: string) =>
+			Object.entries(stored).some(([key, value]) => key.startsWith(prefix) && !!value?.tokens);
+		return !signedIn("mcp__slack|") && signedIn("mcp__unified_mcp|");
+	} catch {
+		return false;
+	}
+}

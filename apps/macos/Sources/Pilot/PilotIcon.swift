@@ -545,8 +545,8 @@ extension Label where Title == Text, Icon == Image {
 /// - pullRequestMerged, pullRequestClosed: terminal pull request states (`PullRequestGlyph`, octicons).
 ///
 /// Other custom images are artwork or animation, not icons, and stay outside this file: the plane app and
-/// menu bar icon (`PlaneImage`), the working spinner (`EllipsisSpinner`), dithered art (`DitherSky`,
-/// `DitherScene`, `DitherCorner`) and image attachment previews.
+/// menu bar icon (`PlaneImage`), the working spinner (`EllipsisSpinner`), status marks
+/// (`statusMark`) and image attachment previews.
 enum PilotMark: CaseIterable {
     case github, linear, slack, gitBranch, pullRequestMerged, pullRequestClosed
 

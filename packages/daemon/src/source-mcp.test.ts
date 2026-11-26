@@ -607,3 +607,14 @@ test("pinned SDK wrapper calls fixed dedicated tools, reuses OAuth and detects r
 		await rm(home, { recursive: true, force: true });
 	}
 });
+
+test("a Slack reply goes only to a known thread, with bounded text", () => {
+	assert.equal(dedicatedSourceTool("slack", "replySlack"), "slack_send_message");
+	const reply = { channel_id: "C123", thread_ts: "1700000000.000100", message: "Fixed, deploying now." };
+	assert.equal(validSourceArguments("replySlack", reply), true);
+	assert.equal(validSourceArguments("replySlack", { ...reply, message: " " }), false);
+	assert.equal(validSourceArguments("replySlack", { ...reply, message: "x".repeat(4001) }), false);
+	assert.equal(validSourceArguments("replySlack", { ...reply, channel_id: "#general" }), false);
+	assert.equal(validSourceArguments("replySlack", { ...reply, unfurl: true }), false);
+	assert.equal(dedicatedSourceTool("linear", "replySlack"), undefined);
+});

@@ -267,7 +267,7 @@ export class RateLimits {
 	}
 }
 
-async function graphql(
+export async function graphql(
 	repo: Repository,
 	query: string,
 	variables: [flag: "-f" | "-F", name: string, value: string][],

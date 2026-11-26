@@ -63,6 +63,83 @@ export interface SessionPullRequest {
 	readiness?: PullRequestReadiness;
 }
 
+/** Sections of the Today page. */
+export type TodaySection = "priorities" | "reviews" | "quickWins" | "waiting";
+export const TODAY_SECTIONS: readonly TodaySection[] = ["priorities", "reviews", "quickWins", "waiting"];
+
+/** One line of the Today page, written by a Today routine's agent. */
+export interface TodayItem {
+	/** Stable across rewrites of the same day, so the user's done mark survives a refresh. */
+	id: string;
+	title: string;
+	/** Why it matters today, one sentence. */
+	why?: string;
+	url?: string;
+	/** Where it comes from: "Linear", "Slack · Sarah", "GitHub #123"... */
+	source?: string;
+	/** "~5 min", "1h"... */
+	effort?: string;
+	/** What to ask an agent when the user starts it. */
+	prompt?: string;
+	done?: boolean;
+	/** Chat started from this item. */
+	sessionId?: string;
+}
+
+/** GET /api/today?date=YYYY-MM-DD (local date, default today). */
+export interface TodayPage {
+	date: string;
+	/** 0 when nothing was written for that day yet. */
+	updatedAt: number;
+	summary?: string;
+	priorities: TodayItem[];
+	reviews: TodayItem[];
+	quickWins: TodayItem[];
+	waiting: TodayItem[];
+	/** Things learned about how the user works, kept across days. */
+	lessons: string[];
+	/** End-of-day recap. */
+	wrap?: string;
+}
+
+/** PATCH /api/today/items/:id?date=: the user's marks on an item. */
+export interface TodayItemPatch {
+	done?: boolean;
+	sessionId?: string;
+}
+
+/** One-click requests on a chat's open PR. Each sends the agent a focused message, as if the user wrote it. */
+export type PullRequestAction = "resolve_comments" | "rebase_main" | "fix_ci";
+
+/** POST /api/sessions/:id/pull-request-actions. `url` picks one of the chat's open PRs; omitted, the newest. */
+export interface PullRequestActionRequest {
+	action: PullRequestAction;
+	url?: string;
+}
+
+/** An unresolved, non-outdated review thread, with its first comment. */
+export interface PullRequestReviewThread {
+	id: string;
+	path?: string;
+	line?: number;
+	author?: string;
+	/** First comment, at most 500 characters. Untrusted text. */
+	body: string;
+	url?: string;
+}
+
+/** GET /api/sessions/:id/review-threads?url=<pr url>. */
+export interface PullRequestReviewThreads {
+	url: string;
+	threads: PullRequestReviewThread[];
+}
+
+/** POST /api/sessions/:id/review-threads/resolve. Resolves on GitHub only threads the user confirmed. */
+export interface ResolveReviewThreadsRequest {
+	url: string;
+	threadIds: string[];
+}
+
 /** POST /api/sessions/:id/pull-requests. Returns SessionSummary & PullRequestBindingResult. */
 export interface BindPullRequestRequest {
 	/** GitHub PR URL, or a positive number (123 or #123, no leading zero) in the project's GitHub upstream. */
@@ -382,6 +459,16 @@ export interface SessionSummary {
 	working?: boolean;
 	/** Worker startup failed. POST /api/sessions/:id/retry-startup reloads it with the existing outbox. */
 	canRetryStartup?: boolean;
+	/** Kind of work, for Build chats started with one. */
+	kind?: WorkKind;
+	/** Squad agent sharing the environment of this workspace (another agent of its mission). */
+	missionEnv?: string;
+	/** This workspace's environment is shared by the mission's other agents. */
+	missionEnvOwner?: boolean;
+	/** The last run of the project's setup scripts in this chat's workspace. */
+	setup?: WorkspaceScriptRun;
+	/** The last run of the project's checks after a turn that changed files. */
+	checks?: WorkspaceScriptRun;
 	outcome?: SessionOutcome;
 	outcomeAt?: number;
 	outcomeReason?: string;
@@ -671,11 +758,13 @@ export interface Project {
 	path: string;
 	/** Default model for new sessions, "provider/modelId". */
 	model?: string;
-	/** "clone" (default): each session works in a private clone. "direct": in `path` itself. */
+	/** "clone" (default): each session works in a private clone. "worktree": in a Git worktree. "direct": in `path`. */
 	workspace?: WorkspaceMode;
 	/** Require branch/PR delivery. Defaults to true; false permits direct default-branch pushes. */
 	requirePullRequest?: boolean;
 	tracking?: ProjectTrackingConfig;
+	/** Personal workspace scripts, kept in Pilot's settings and never in the repository. */
+	scripts?: WorkspaceScripts;
 	/** Host-owned generation for diagnostic configuration fencing. Never an editable project setting. */
 	trackingGeneration?: string;
 	/** Environment profile. Edited through PUT /api/projects/:id/environment, never through project updates. */
@@ -685,7 +774,60 @@ export interface Project {
 	createdAt: number;
 }
 
-export type WorkspaceMode = "clone" | "direct";
+/**
+ * Kind of work a Build chat does. "quick" runs the project's light `quickSetup`, "feature" (default) its full
+ * `setup`. Scripts read it as PILOT_KIND.
+ */
+export type WorkKind = "quick" | "feature";
+
+/** "worktree" adds a real `git worktree` of the project, for scripts that rely on `git worktree list`. */
+export type WorkspaceMode = "clone" | "direct" | "worktree";
+
+/** One shell command run in a chat's workspace through the user's login shell. */
+export interface WorkspaceScriptStep {
+	command: string;
+	name?: string;
+	/** Defaults to 10 minutes, at most 30. */
+	timeoutMs?: number;
+}
+
+/**
+ * Project scripts. `setup` runs once after a Build workspace is created, before the agent's first turn, with
+ * PILOT_SESSION_ID, PILOT_WORKSPACE, PILOT_PROJECT_PATH and PILOT_BRANCH set. `run` starts the dev server on
+ * demand. `checks` run after a turn that changed files; a failure goes back to the agent. `teardown` runs before an
+ * archived chat's Git worktree is removed, to free what setup created (a database, a port slot).
+ */
+export interface WorkspaceScripts {
+	setup?: WorkspaceScriptStep[];
+	/** Replaces `setup` for Quick fix chats: a light setup that reuses the main checkout's environment. */
+	quickSetup?: WorkspaceScriptStep[];
+	/**
+	 * Replaces `setup` for a squad agent once another agent of its mission has a ready environment. Runs with
+	 * PILOT_MISSION_ID and PILOT_MISSION_ENV (that agent's workspace), to share its database and services.
+	 */
+	agentSetup?: WorkspaceScriptStep[];
+	run?: string;
+	checks?: WorkspaceScriptStep[];
+	teardown?: WorkspaceScriptStep[];
+}
+
+/** The outcome of one step. `output` holds only the tail of what it printed. */
+export interface WorkspaceScriptResult {
+	name?: string;
+	command: string;
+	exitCode: number;
+	durationMs: number;
+	output: string;
+	timedOut?: boolean;
+}
+
+/** The last setup or checks run in a chat's workspace, shown in the chat and kept until the next run. */
+export interface WorkspaceScriptRun {
+	state: "running" | "ok" | "failed";
+	startedAt: number;
+	finishedAt?: number;
+	results: WorkspaceScriptResult[];
+}
 
 /** GET /api/projects/:id/github. Resolved on demand by GitHub CLI on the project's host. */
 export interface ProjectGitHubRepository {
@@ -890,6 +1032,18 @@ export interface DatabaseAccessDecision {
 	allow: boolean;
 }
 
+/** POST /api/work/chat: start a chat and link a tracked item with its external start in one call. */
+export interface StartWorkChatRequest {
+	spawn: SpawnRequest;
+	trackedItemId?: string;
+}
+
+export interface StartWorkChatResponse {
+	session: SessionSummary;
+	/** The chat started but the item could not be linked or moved; shown quietly, never undoing the chat. */
+	linkError?: string;
+}
+
 /** POST /api/projects, PATCH /api/projects/:id (partial). An empty model clears it. */
 export interface ProjectRequest {
 	path: string;
@@ -898,6 +1052,8 @@ export interface ProjectRequest {
 	workspace?: WorkspaceMode;
 	requirePullRequest?: boolean;
 	tracking?: ProjectTrackingConfig;
+	/** Replaces the scripts; null clears them. */
+	scripts?: WorkspaceScripts | null;
 }
 
 /** Missions: a goal spanning several chats of one project. State is daemon-owned. */
@@ -1721,6 +1877,10 @@ export interface SpawnRequest {
 	mode?: ChatMode;
 	/** Per-chat Build override. Omitted uses project settings; cwd-only cannot request a clone. */
 	workspace?: WorkspaceMode;
+	/** Build chats only. Omitted means "feature". */
+	kind?: WorkKind;
+	/** A Today Desk routine chat: it gets the `today_write` tool. */
+	todayDesk?: boolean;
 	projectId?: string;
 	cwd?: string;
 	/** Exact origin head name, without adding `origin/`. Prefixes within real names are literal.

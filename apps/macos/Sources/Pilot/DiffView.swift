@@ -6,14 +6,29 @@ struct DiffView: View {
     let file: FileDiff
     var showNumbers = true
     var maxLines = 600
+    /// Set to let the user comment on a line; the comment goes to the chat's agent.
+    var onComment: ((DiffLine, String) async throws -> Void)? = nil
     @Environment(\.pilotFonts) private var fonts
+    @State private var commenting: Int?
+    @State private var draft = ""
+    @State private var sending = false
+    @State private var error: String?
 
     var body: some View {
         let lines = Array(file.lines.prefix(maxLines))
         ScrollView(.horizontal, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
                     row(line)
+                        .contextMenu {
+                            if onComment != nil, line.newNumber != nil || line.oldNumber != nil {
+                                Button("Comment on This Line…") { draft = ""; error = nil; commenting = index }
+                            }
+                        }
+                        .popover(isPresented: Binding(get: { commenting == index }, set: { if !$0 { commenting = nil } }),
+                                 arrowEdge: .bottom) {
+                            commentEditor(line)
+                        }
                 }
                 if file.lines.count > maxLines {
                     Text("… \(file.lines.count - maxLines) more lines")
@@ -26,6 +41,43 @@ struct DiffView: View {
             .frame(minWidth: 0, alignment: .leading)
         }
         .textSelection(.enabled)
+    }
+
+    private func commentEditor(_ line: DiffLine) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("\(file.path):\(line.newNumber ?? line.oldNumber ?? 0)")
+                .font(fonts.monoSmall).foregroundStyle(Theme.mutedForeground)
+            TextField("What should change here?", text: $draft, axis: .vertical)
+                .lineLimit(3...8)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 360)
+            if let error { Text(error).font(.pilot(.caption)).foregroundStyle(Theme.destructive) }
+            HStack {
+                Spacer()
+                Button("Cancel") { commenting = nil }
+                Button(sending ? "Sending…" : "Send to Agent") {
+                    guard let onComment else { return }
+                    sending = true
+                    Task {
+                        defer { sending = false }
+                        do {
+                            try await onComment(line, draft)
+                            commenting = nil
+                        } catch { self.error = error.localizedDescription }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(sending || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(12)
+    }
+
+    /// The message an inline comment sends: where, the line as it reads now, and the request.
+    static func commentMessage(path: String, line: DiffLine, comment: String) -> String {
+        let number = line.newNumber ?? line.oldNumber ?? 0
+        let side = line.newNumber == nil ? " (removed line)" : ""
+        return "Review comment on \(path):\(number)\(side):\n> \(line.text)\n\n\(comment.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
 
     @ViewBuilder private func row(_ line: DiffLine) -> some View {

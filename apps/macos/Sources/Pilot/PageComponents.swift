@@ -75,13 +75,13 @@ private struct RowTrailingGutterKey: EnvironmentKey {
 
 /// A list row with a soft fill under the pointer. The content closure receives the hover state so rows
 /// can reveal secondary controls with `revealed(_:)`. Put every revealed action in a context menu too,
-/// so it stays reachable from the keyboard and VoiceOver. Inside a `ditherCorner` the row draws no fill: its
+/// so it stays reachable from the keyboard and VoiceOver. Inside a `statusMark` the row draws no fill: its
 /// corner recedes under the pointer instead, and selection stays the only row fill.
 struct HoverRow<Content: View>: View {
     var horizontalPadding: CGFloat = 8
     var verticalPadding: CGFloat = 6
     @ViewBuilder let content: (Bool) -> Content
-    @Environment(\.rowHasDitherCorner) private var hasCorner
+    @Environment(\.rowHasStatusMark) private var hasCorner
     @Environment(\.rowTrailingGutter) private var trailingGutter
     @State private var hovered = false
 
