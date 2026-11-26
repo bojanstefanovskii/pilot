@@ -37,7 +37,7 @@ final class FilesModel: ObservableObject {
     @Published private(set) var changed: [String: ChangedFile] = [:]
     @Published private(set) var diffs: [String: FileDiff] = [:]
     @Published private(set) var error: String?
-    private var lastChanges: SessionChanges?
+    @Published private(set) var lastChanges: SessionChanges?
     private var refreshingChanges = false
     private var fileTask: Task<Void, Never>?
 

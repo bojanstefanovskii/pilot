@@ -5,6 +5,23 @@ import SwiftUI
 /// Workflow pages of the main window, listed at the top of the sidebar.
 enum WorkflowPage: String, Hashable {
     case today, chats, sprint, reviews, routines, database, missions, quickFixes, features, pullRequests, notes
+
+    /// The sidebar row's name, also used by the Back button of a chat or mission opened from the page.
+    var title: String {
+        switch self {
+        case .today: "Today"
+        case .chats: "Chats"
+        case .sprint: "Sprint"
+        case .reviews: "Reviews"
+        case .routines: "Routines"
+        case .database: "Database"
+        case .missions: "Missions"
+        case .quickFixes: "Quick fixes"
+        case .features: "Features"
+        case .pullRequests: "Pull requests"
+        case .notes: "Notes"
+        }
+    }
 }
 
 /// PRs that wait on the user's review, per project. "Test this PR" opens a Build chat on the PR's branch that tries

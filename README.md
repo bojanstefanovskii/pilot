@@ -141,9 +141,9 @@ the daemon report; check, sign-in and setup actions are not included. See the
   terminal in the session workspace, task progress and pull request status. Attach a pull request in Changes
   using its GitHub link or just its number (`123` or `#123`) in the project's GitHub repository.
   Chats open with recent messages; **Show earlier messages** reveals older pages without changing agent context.
-- **Browse files without editing.** The **Files** inspector is a read-only file browser for a Build chat's
-  workspace: a lazily loaded tree with changed files marked, a filter, and the open file with syntax colors, line
-  numbers and ⌘F, or its diff.
+- **Browse files without editing.** The **Files** inspector (⇧⌘D) is a read-only file browser for a Build chat's
+  workspace: branch and pull request context with one-click PR actions, a lazily loaded tree with changed files
+  marked, a filter, and the open file with syntax colors, line numbers and ⌘F, or its diff with line comments.
 - **See what is done.** Chats whose pull requests merged on GitHub and missions marked done appear in violet under
   **Done** on the Missions, Features and Quick fixes boards. **Write summary** (on a merged chat or done mission,
   and in the actions menus) asks the agent to write what was done as an artifact; for a mission the coordinator

@@ -853,7 +853,7 @@ struct ChatView: View {
             }
             model.showCommandPalette(query: arguments.isEmpty ? "Model: " : "Model: \(arguments)")
         case SlashCommands.terminal: return model.openInspector(.terminal)
-        case SlashCommands.changes: return model.openInspector(.changes)
+        case SlashCommands.changes: return model.openInspector(.files)
         case SlashCommands.artifacts: return model.openInspector(.artifacts)
         case SlashCommands.help:
             guard let open = model.openKeyboardShortcutsAction else { return false }

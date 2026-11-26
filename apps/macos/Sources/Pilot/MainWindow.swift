@@ -104,6 +104,18 @@ struct MainWindow: View {
                     localDetail
                 }
             }
+            .toolbar {
+                // A chat or mission opened from a workflow page (Features, Missions…) leads back to that page.
+                if let tab = model.activeWorkflowTab {
+                    ToolbarItem(placement: .navigation) {
+                        Button { model.showWorkflowBoard(tab) } label: {
+                            Label(tab.title, systemImage: "chevron.left").labelStyle(.titleAndIcon)
+                        }
+                        .help("Back to \(tab.title)")
+                        .accessibilityLabel("Back to \(tab.title)")
+                    }
+                }
+            }
             .keyboardRegion(.content)
         }
         .sheet(isPresented: $model.githubImportPresented) {
@@ -331,8 +343,7 @@ struct SessionInspectorControls: View {
             SessionMissionControl(session: session)
         }
         if session.supportsChanges {
-            InspectorToggle(tab: .changes, icon: PilotIcon.changes, help: "Changes (⇧⌘D)")
-            InspectorToggle(tab: .files, icon: PilotIcon.code, help: "Files")
+            InspectorToggle(tab: .files, icon: PilotIcon.code, help: "Files and changes (⇧⌘D)")
             InspectorToggle(tab: .terminal, icon: PilotIcon.terminal, help: "Terminal (⌘J)")
         }
         if !session.isAsk {
@@ -440,12 +451,6 @@ struct Inspector: View {
 
     var body: some View {
         ZStack {
-            if session.supportsChanges {
-                ChangesPane(session: session, isVisible: model.inspectorTab == .changes)
-                    .opacity(model.inspectorTab == .changes ? 1 : 0)
-                    .allowsHitTesting(model.inspectorTab == .changes)
-                    .accessibilityHidden(model.inspectorTab != .changes)
-            }
             // Mounted once opened, so browsing other tabs never starts a shell.
             if let host = context?.host ?? model.localHost, session.supportsChanges,
                model.inspectorTab == .terminal || model.terminals.order.contains(HostResourceRef(host: host, kind: .session, localId: session.id).storageKey) {

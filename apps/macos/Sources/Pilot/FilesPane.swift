@@ -18,6 +18,11 @@ struct FilesPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Branch, pull requests and their one-click actions, as Changes showed them.
+            if model.openPath == nil {
+                ChangesRepositoryContext(session: session, changes: model.lastChanges)
+                Rectangle().fill(Theme.border).frame(height: 1)
+            }
             if let path = model.openPath { fileHeader(path) } else { treeHeader }
             Rectangle().fill(Theme.border).frame(height: 1)
             if let error = model.error {
@@ -130,7 +135,11 @@ struct FilesPane: View {
     @ViewBuilder private var fileBody: some View {
         if let path = model.openPath, model.mode == .diff, let diff = model.diffs[path] {
             ScrollView([.vertical, .horizontal]) {
-                DiffView(file: diff, maxLines: 4000).padding(.vertical, 6)
+                DiffView(file: diff, maxLines: 4000, onComment: session.isReadOnlyHistory || session.isAsk ? nil : { line, comment in
+                    try await endpoint.send(session.id, message: DiffView.commentMessage(path: diff.path, line: line, comment: comment),
+                                            mode: .followUp)
+                })
+                .padding(.vertical, 6)
             }
         } else if let document = model.document, document.path == model.openPath {
             if document.binary {

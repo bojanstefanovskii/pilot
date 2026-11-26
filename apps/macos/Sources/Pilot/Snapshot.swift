@@ -265,7 +265,7 @@ enum Snapshot {
             model.client.loadFixture(projects: Fixtures.projects, sessions: [session])
             model.selectedSessionId = session.id
             model.inspectorVisible = true
-            model.inspectorTab = .changes
+            model.inspectorTab = .files
             for _ in 0..<10 { try? await Task.sleep(for: .milliseconds(100)) }
             guard let window = NSApp.windows.first(where: { $0.toolbar != nil }),
                   let frame = window.contentView?.superview else {
@@ -280,7 +280,7 @@ enum Snapshot {
                 NSApp.activate(ignoringOtherApps: true)
                 for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                     NSApp.appearance = NSAppearance(named: appearance)
-                    for tab in [InspectorTab.changes, .terminal, .agents, .artifacts, .links] {
+                    for tab in [InspectorTab.files, .terminal, .agents, .artifacts, .links] {
                         model.inspectorTab = tab
                         model.inspectorVisible = true
                         for _ in 0..<8 { try? await Task.sleep(for: .milliseconds(100)) }
@@ -802,7 +802,7 @@ enum Snapshot {
             size: size,
             to: directory.appending(path: "queued-message-editor.png")
         )
-        model.inspectorTab = .changes
+        model.inspectorTab = .files
         await render(
             Frame(title: session.title, subtitle: "pilot · \(session.branch ?? "")") {
                 HStack(spacing: 0) {

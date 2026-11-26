@@ -5,8 +5,7 @@ import PilotCore
 import PilotTelemetry
 
 enum InspectorTab: Hashable {
-    case changes
-    /// The read-only file browser: workspace tree, file viewer and per-file diff.
+    /// The read-only file browser: branch and PR context, workspace tree, changed files, file viewer and diffs.
     case files
     case terminal
     case artifacts
@@ -16,7 +15,7 @@ enum InspectorTab: Hashable {
     /// The control chat's watches and audited actions.
 
     func isAvailable(for session: SessionSummary) -> Bool {
-        if self == .changes || self == .terminal || self == .files { return session.supportsChanges }
+        if self == .terminal || self == .files { return session.supportsChanges }
         if self == .mission { return session.missionId != nil && !session.isMissionCoordinator }
         return !session.isAsk || self == .artifacts || self == .links
     }
@@ -152,7 +151,7 @@ final class AppModel: ObservableObject {
     @Published var pendingMissionDeletionId: String?
     @Published var showingInactiveMissions = false
     @Published var inspectorVisible = false
-    @Published var inspectorTab: InspectorTab = .changes
+    @Published var inspectorTab: InspectorTab = .files
     @Published var sidebarQuery = ""
     /// The sidebar search field shows only after ⌘F, or while it holds a query.
     @Published var sidebarSearchVisible = false

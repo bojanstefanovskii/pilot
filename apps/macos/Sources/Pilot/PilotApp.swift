@@ -40,7 +40,7 @@ struct PilotApp: App {
                     .keyboardShortcut(.rightArrow, modifiers: .command)
                     .disabled(!model.navigationHistory.canGoForward)
                 Divider()
-                Button("Toggle Changes") { model.toggleInspector(.changes) }
+                Button("Toggle Files") { model.toggleInspector(.files) }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
                     .disabled(model.selectedSessionId == nil || model.selectedSession?.isAsk == true)
                 Button("Toggle Terminal") { model.toggleInspector(.terminal) }
