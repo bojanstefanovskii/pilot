@@ -16,12 +16,73 @@ extension AppModel {
     }
 
     /// Today, Sprint, Reviews or Routines, as a page of the main window.
+    /// Opens a workflow page like a tab: it returns to the chat or mission last opened from it. Selecting the page
+    /// again while that chat or mission is shown goes back to the page itself.
     func showWorkflow(_ page: WorkflowPage) {
+        if activeWorkflowTab == page {
+            workflowDetails[page] = nil
+        } else if let detail = workflowDetails[page] {
+            if canReopen(detail) {
+                pendingWorkflowOrigin = page
+                defer { pendingWorkflowOrigin = nil }
+                switch detail {
+                case let .session(id): open(session: id)
+                case let .mission(id): openMission(id)
+                default: break
+                }
+                return
+            }
+            workflowDetails[page] = nil
+        }
+        showWorkflowBoard(page)
+    }
+
+    /// The page itself, never its remembered detail.
+    func showWorkflowBoard(_ page: WorkflowPage) {
         // One visited destination: Usage is never recorded on the way to the page.
         beginNavigation()
         defer { endNavigation() }
         showUsage()
         workflowPage = page
+    }
+
+    /// The workflow page whose remembered chat or mission is on screen.
+    var activeWorkflowTab: WorkflowPage? {
+        guard let origin = workflowOrigin, workflowDetails[origin] == currentSelection else { return nil }
+        return origin
+    }
+
+    func isWorkflowTabSelected(_ page: WorkflowPage) -> Bool { workflowPage == page || activeWorkflowTab == page }
+
+    private func canReopen(_ detail: SidebarSelection) -> Bool {
+        switch detail {
+        case let .session(id): client.sessions.contains { $0.id == id }
+        case let .mission(id): client.missions.contains { $0.id == id }
+        default: false
+        }
+    }
+
+    /// A chat or mission opened from a workflow page becomes that page's detail. Opening anything else from
+    /// elsewhere leaves the page, which keeps its detail for next time.
+    func trackWorkflowDetail(from previous: NavigationLocation, to next: NavigationLocation) {
+        let isDetail: Bool
+        switch next.selection {
+        case .session, .mission: isDetail = true
+        default: isDetail = false
+        }
+        if let pending = pendingWorkflowOrigin, isDetail {
+            workflowOrigin = pending
+            return
+        }
+        if next.selection == .usage, next.workflowPage != nil { return }
+        if isDetail, previous.selection == .usage, let page = previous.workflowPage {
+            workflowDetails[page] = next.selection
+            workflowOrigin = page
+            return
+        }
+        // Navigating inside the remembered detail (its own chat or mission) keeps the tab; anything else leaves it.
+        if let origin = workflowOrigin, workflowDetails[origin] == next.selection { return }
+        if workflowOrigin != nil { workflowOrigin = nil }
     }
 }
 

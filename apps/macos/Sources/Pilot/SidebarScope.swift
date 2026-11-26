@@ -182,39 +182,39 @@ struct SidebarHeader: View {
             }
             .animation(Theme.Motion.quick, value: needsYou > 0)
             SidebarSectionLabel("Work")
-            SidebarNavRow(title: "Today", icon: PilotIcon.todo, selected: model.workflowPage == .today,
+            SidebarNavRow(title: "Today", icon: PilotIcon.todo, selected: model.isWorkflowTabSelected(.today),
                           help: "Your day, planned by the Today routines", height: Self.tabHeight,
                           action: { model.showWorkflow(.today) }) { EmptyView() }
-            SidebarNavRow(title: "Chats", icon: PilotIcon.compose, selected: model.workflowPage == .chats,
+            SidebarNavRow(title: "Chats", icon: PilotIcon.compose, selected: model.isWorkflowTabSelected(.chats),
                           help: "Free chats on the current checkout: questions, bugs, small requests", height: Self.tabHeight,
                           action: { model.showWorkflow(.chats) }) { attention(freeChatsNeedingYou) }
-            SidebarNavRow(title: "Sprint", icon: PilotIcon.linearIssue, selected: model.workflowPage == .sprint,
+            SidebarNavRow(title: "Sprint", icon: PilotIcon.linearIssue, selected: model.isWorkflowTabSelected(.sprint),
                           help: "The current Linear cycle with each ticket's chat", height: Self.tabHeight,
                           action: { model.showWorkflow(.sprint) }) { EmptyView() }
-            SidebarNavRow(title: "Pull requests", icon: PilotIcon.pullRequest, selected: model.workflowPage == .pullRequests,
+            SidebarNavRow(title: "Pull requests", icon: PilotIcon.pullRequest, selected: model.isWorkflowTabSelected(.pullRequests),
                           help: "Your PRs: what needs you, what is open, what merged", height: Self.tabHeight,
                           action: { model.showWorkflow(.pullRequests) }) { attention(model.pullRequestsNeedingYou.values.reduce(0, +)) }
-            SidebarNavRow(title: "Reviews", icon: PilotIcon.pullRequest, selected: model.workflowPage == .reviews,
+            SidebarNavRow(title: "Reviews", icon: PilotIcon.pullRequest, selected: model.isWorkflowTabSelected(.reviews),
                           help: "Pull requests waiting on your review", height: Self.tabHeight,
                           action: { model.showWorkflow(.reviews) }) { EmptyView() }
             SidebarSectionLabel("In progress")
-            SidebarNavRow(title: "Missions", icon: PilotIcon.mission, selected: model.workflowPage == .missions,
+            SidebarNavRow(title: "Missions", icon: PilotIcon.mission, selected: model.isWorkflowTabSelected(.missions),
                           help: "Missions in progress, as cards", height: Self.tabHeight,
                           action: { model.showWorkflow(.missions) }) { attention(missionsNeedingYou) }
-            SidebarNavRow(title: "Features", icon: PilotIcon.buildMode, selected: model.workflowPage == .features,
+            SidebarNavRow(title: "Features", icon: PilotIcon.buildMode, selected: model.isWorkflowTabSelected(.features),
                           help: "Feature chats in progress, as cards", height: Self.tabHeight,
                           action: { model.showWorkflow(.features) }) { attention(chatsNeedingYou(quick: false)) }
-            SidebarNavRow(title: "Quick fixes", icon: PilotIcon.bug, selected: model.workflowPage == .quickFixes,
+            SidebarNavRow(title: "Quick fixes", icon: PilotIcon.bug, selected: model.isWorkflowTabSelected(.quickFixes),
                           help: "Quick fix chats in progress, as cards", height: Self.tabHeight,
                           action: { model.showWorkflow(.quickFixes) }) { attention(chatsNeedingYou(quick: true)) }
             SidebarSectionLabel("Tools")
-            SidebarNavRow(title: "Notes", icon: PilotIcon.document, selected: model.workflowPage == .notes,
+            SidebarNavRow(title: "Notes", icon: PilotIcon.document, selected: model.isWorkflowTabSelected(.notes),
                           help: "Your notes, cheat codes, artifacts and files", height: Self.tabHeight,
                           action: { model.showWorkflow(.notes) }) { EmptyView() }
-            SidebarNavRow(title: "Routines", icon: PilotIcon.pending, selected: model.workflowPage == .routines,
+            SidebarNavRow(title: "Routines", icon: PilotIcon.pending, selected: model.isWorkflowTabSelected(.routines),
                           help: "Recurring routines and scheduled chats", height: Self.tabHeight,
                           action: { model.showWorkflow(.routines) }) { attention(failedRoutines) }
-            SidebarNavRow(title: "Database", icon: PilotIcon.terminal, selected: model.workflowPage == .database,
+            SidebarNavRow(title: "Database", icon: PilotIcon.terminal, selected: model.isWorkflowTabSelected(.database),
                           help: "Read-only SQL on a project's databases", height: Self.tabHeight,
                           action: { model.showWorkflow(.database) }) { EmptyView() }
             SidebarNavRow(title: "Usage", icon: .activity, selected: model.showingUsage && model.workflowPage == nil,

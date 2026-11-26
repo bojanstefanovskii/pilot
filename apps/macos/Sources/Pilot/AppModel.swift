@@ -181,6 +181,12 @@ final class AppModel: ObservableObject {
     @Published var showingUsage = false { didSet { if !showingUsage, workflowPage != nil { workflowPage = nil } } }
     /// The workflow page shown in place of Usage, or nil for Usage itself.
     @Published var workflowPage: WorkflowPage?
+    /// The chat or mission last opened from each workflow page, so coming back to the page reopens it, like a tab.
+    @Published var workflowDetails: [WorkflowPage: SidebarSelection] = [:]
+    /// The workflow page whose remembered chat or mission is on screen; its sidebar row stays selected.
+    @Published var workflowOrigin: WorkflowPage?
+    /// Set while a workflow page reopens its remembered detail, so that navigation keeps it as the origin.
+    var pendingWorkflowOrigin: WorkflowPage?
     /// Your open PRs that need you (changes requested, failing CI), by project, refreshed in the background.
     @Published var pullRequestsNeedingYou: [String: Int] = [:]
     /// The Inbox's project filter (nil lists every project). Preset to the focused project each time the Inbox
@@ -1506,6 +1512,7 @@ extension AppModel {
 
     private func recordNavigation() {
         let location = navigationLocation
+        trackWorkflowDetail(from: navigationHistory.current, to: location)
         // Avoid publishing for selection cleanup that leaves the destination unchanged.
         if navigationHistory.current != location { navigationHistory.record(location) }
     }
@@ -1548,7 +1555,7 @@ extension AppModel {
             archiveMissionId = missionId
             showingArchive = true
         case .usage:
-            if let page = location.workflowPage { showWorkflow(page) } else { showUsage() }
+            if let page = location.workflowPage { showWorkflowBoard(page) } else { showUsage() }
         case .inbox:
             showInbox(for: location.inboxProjectId, context: context)
             inboxProjectId = location.inboxProjectId

@@ -48,3 +48,21 @@ import Testing
     #expect(FilesModel.lineStarts("a\nbc\n") == [0, 2])
     #expect(FilesModel.lineStarts("a\n\nb") == [0, 2, 3])
 }
+
+@Test @MainActor func workflowPagesReopenTheChatOpenedFromThemLikeTabs() throws {
+    let app = AppModel(projectFolderDefaults: UserDefaults(suiteName: "workflow-tabs-\(UUID())")!)
+    try app.registerLocal(HostRef(hostId: "local", daemonId: "daemon", lineageId: "lineage"))
+    app.client.loadFixture(projects: [Project(id: "p1", name: "One", path: "/tmp/one", createdAt: 1)], sessions: [
+        SessionSummary(id: "feature", title: "F", cwd: "/tmp/one", projectId: "p1", createdAt: 1, updatedAt: 1, state: "idle"),
+    ])
+    app.showWorkflow(.features)
+    app.open(session: "feature")
+    #expect(app.isWorkflowTabSelected(.features))
+    app.showWorkflow(.chats)
+    #expect(app.workflowPage == .chats)
+    app.showWorkflow(.features)
+    #expect(app.selectedSessionId == "feature" && app.isWorkflowTabSelected(.features))
+    // Selecting the tab again goes back to its board.
+    app.showWorkflow(.features)
+    #expect(app.workflowPage == .features && app.selectedSessionId == nil)
+}
