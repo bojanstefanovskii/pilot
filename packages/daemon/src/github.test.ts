@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+	lookupPreviews,
+	previewLinks,
 	githubRepository,
 	lookupHealth,
 	lookupPullRequests,
@@ -574,4 +576,37 @@ test("readiness stays batched for 100 busy PRs and never fetches comment bodies"
 	t.diagnostic(
 		`100 PRs, 10,000 checks + 10,000 review threads: ${(performance.now() - start).toFixed(1)} ms, ${calls} batched calls`,
 	);
+});
+
+test("previewLinks keeps preview hosts of this PR, app first, one per host", () => {
+	const comment = [
+		"Deployed: https://pr-123-api.staging.example.com and https://pr-123.staging.example.com/.",
+		"Logs https://app.datadoghq.eu/logs?query=environment%3Apr-123 queue https://sqs.eu-west-1.amazonaws.com/1/rm-pr-123",
+		"Other PR https://pr-124.staging.example.com, vercel (https://my-app-git-feat.vercel.app)",
+	];
+	assert.deepEqual(previewLinks(123, comment), [
+		"https://pr-123.staging.example.com",
+		"https://pr-123-api.staging.example.com",
+		"https://my-app-git-feat.vercel.app",
+	]);
+	assert.deepEqual(previewLinks(1, ["http://pr-1.example.com https://user:pw@pr-1.example.com"]), []);
+});
+
+test("lookupPreviews reads bodies and comments of several PRs in one request", async () => {
+	let calls = 0;
+	const links = await lookupPreviews(repo, [7, 8, 7], "/clone", async (_file, args) => {
+		calls++;
+		const vars = variables(args);
+		assert.match(vars.get("query")!, /PilotPullRequestPreviews/);
+		assert.equal(vars.get("p0"), "7");
+		assert.equal(vars.get("p1"), "8");
+		assert.equal(vars.has("p2"), false, "numbers are deduplicated");
+		return respond({
+			p0: { body: "Preview: https://pr-7.staging.example.com", comments: { nodes: [] } },
+			p1: { body: "", comments: { nodes: [{ body: "Deployed to https://pr-8-api.example.com" }] } },
+		});
+	});
+	assert.equal(calls, 1);
+	assert.deepEqual(links.get(7), ["https://pr-7.staging.example.com"]);
+	assert.deepEqual(links.get(8), ["https://pr-8-api.example.com"]);
 });

@@ -585,6 +585,85 @@ const healthFields = [
 	"reviewThreads(first: 100) { nodes { id isResolved isOutdated comments(last: 1) { totalCount nodes { id updatedAt } } } pageInfo { hasNextPage } }",
 ].join(" ");
 
+const PREVIEW_LIMIT = 4;
+const PREVIEW_HOSTS = /\.(vercel\.app|netlify\.app|onrender\.com|pages\.dev|fly\.dev|up\.railway\.app)$/i;
+
+/**
+ * Preview deployment URLs of PR `number` in its description and comments: hosts naming the PR (`pr-123.…`,
+ * `app-pr-123.…`), then preview hosts. One per host, shortest first, so the app comes before its `-api`.
+ */
+export function previewLinks(number: number, texts: readonly string[]): string[] {
+	const naming = new RegExp(`(?:^|[.-])pr-?${number}(?:[.-]|$)`, "i");
+	const origins = new Map<string, string>();
+	for (const text of texts)
+		for (const match of text.matchAll(/https:\/\/[^\s<>()"'`\][|]+/g)) {
+			let url: URL;
+			try {
+				url = new URL(match[0].replace(/[.,;:!?*_]+$/, ""));
+			} catch {
+				continue;
+			}
+			if (url.username || url.password || url.port) continue;
+			const host = url.hostname.toLowerCase();
+			if (!naming.test(host) && !PREVIEW_HOSTS.test(host)) continue;
+			if (!origins.has(host)) origins.set(host, `https://${host}${url.pathname === "/" ? "" : url.pathname}`);
+		}
+	const rank = (host: string) => (naming.test(host) ? 0 : 1);
+	return [...origins.entries()]
+		.sort(([a], [b]) => rank(a) - rank(b) || a.length - b.length || a.localeCompare(b))
+		.slice(0, PREVIEW_LIMIT)
+		.map(([, url]) => url);
+}
+
+/**
+ * Preview links of several open PRs of one repository, in one GraphQL request. Separate from the health sweep, which
+ * never reads comment bodies: callers ask only for PRs without a link yet, and not more often than every few minutes.
+ * PRs that fail to resolve are left out.
+ */
+export async function lookupPreviews(
+	repo: Repository,
+	numbers: readonly number[],
+	cwd: string,
+	runner: Runner = run,
+	limits?: RateLimits,
+): Promise<Map<number, string[]>> {
+	const unique = [...new Set(numbers)].slice(0, healthPerQuery);
+	const result = new Map<number, string[]>();
+	if (!unique.length) return result;
+	const query = [
+		`query PilotPullRequestPreviews($owner: String!, $name: String!, ${unique.map((_, i) => `$p${i}: Int!`).join(", ")}) {`,
+		"rateLimit { remaining resetAt }",
+		"repository(owner: $owner, name: $name) {",
+		...unique.map((_, i) => `p${i}: pullRequest(number: $p${i}) { body comments(last: 30) { nodes { body } } }`),
+		"}",
+		"}",
+	].join("\n");
+	const repository = await graphql(
+		repo,
+		query,
+		unique.map((number, i): ["-F", string, string] => ["-F", `p${i}`, String(number)]),
+		cwd,
+		runner,
+		limits,
+	);
+	unique.forEach((number, i) => {
+		const pr = repository[`p${i}`];
+		if (pr && typeof pr === "object")
+			result.set(number, previewLinks(number, previewTexts(pr as Record<string, unknown>)));
+	});
+	return result;
+}
+
+function previewTexts(pr: Record<string, unknown>): string[] {
+	const texts = typeof pr.body === "string" ? [pr.body] : [];
+	const comments =
+		pr.comments && typeof pr.comments === "object" ? (pr.comments as { nodes?: unknown }).nodes : undefined;
+	for (const node of Array.isArray(comments) ? comments : [])
+		if (node && typeof node === "object" && typeof (node as { body?: unknown }).body === "string")
+			texts.push((node as { body: string }).body);
+	return texts;
+}
+
 export const noProblems = (): PullRequestProblems => ({ failedChecks: [], reviewComments: 0, mergeConflicts: false });
 
 /** GraphQL selection comparing a PR's base branch with its head, given a String! variable holding the head ref. */

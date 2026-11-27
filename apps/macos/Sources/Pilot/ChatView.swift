@@ -616,7 +616,7 @@ struct ChatView: View {
                             .background(ChatReviewVisibility {
                                 guard !session.isWorking, session.outcome != nil,
                                       feed.hasSnapshot, !transcript.working, !transcript.streaming,
-                                      model.hosts.selection == context?.ref(.session, session.id) || (context == nil && model.selectedSessionId == session.id) else { return }
+                                      model.hosts.selection == context?.ref(.session, session.id) || (context == nil && model.isChatOnScreen(session.id)) else { return }
                                 if let context { model.review(session, on: context.host, chatVisible: true) } else { model.review(session, chatVisible: true) }
                             })
                     }

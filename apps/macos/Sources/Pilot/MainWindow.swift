@@ -18,11 +18,8 @@ struct MainWindow: View {
         switch daemon.status {
         case .running:
             if let session = model.selectedSession {
-                VStack(spacing: 0) {
-                    ChatTabStrip(model: model, tabs: model.chatTabs, client: model.client)
-                    SessionDetail(session: session)
-                        .id(session.id)
-                }
+                SessionDetail(session: session)
+                    .id(session.id)
             } else if let missionId = model.selectedMissionId {
                 MissionPage(missionId: missionId)
                     .id(missionId)
@@ -214,6 +211,8 @@ struct SessionDetail: View {
     let session: SessionSummary
     var feed: SessionFeed?
     var context: HostViewContext? = nil
+    /// Replaces the single chat, keeping this chat's inspector and toolbar: the Chats page's split panes.
+    var content: AnyView? = nil
     @EnvironmentObject private var model: AppModel
     @Environment(\.hostViewContext) private var hostContext
     @EndpointClient private var client
@@ -234,7 +233,11 @@ struct SessionDetail: View {
 
     private var liveDetail: some View {
         ChatInspectorSplit(showsInspector: model.inspectorVisible && model.inspectorTab.isAvailable(for: session)) {
-            ChatView(session: session, feed: feed, context: context ?? model.localHost.map { HostViewContext(host: $0, hosts: model.hosts) })
+            if let content {
+                content
+            } else {
+                ChatView(session: session, feed: feed, context: context ?? model.localHost.map { HostViewContext(host: $0, hosts: model.hosts) })
+            }
         } inspector: {
             Inspector(session: session, feed: feed, context: context ?? model.localHost.map { HostViewContext(host: $0, hosts: model.hosts) })
         }
@@ -286,13 +289,16 @@ struct SessionDetail: View {
         let showsAsk = session.isAsk && !session.isRetainedHistory
         if RemoteChatBadgeText(context: context) != nil
             || (context.map { model.isUnread(session, on: $0.host) } ?? model.isUnread(session)) || showsAsk
-            || AttemptsMenu.label(for: session.attempts ?? []) != nil || session.trackedSource != nil {
+            || AttemptsMenu.label(for: session.attempts ?? []) != nil || session.trackedSource != nil
+            || session.latestPullRequest != nil {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 8) {
                     RemoteChatBadge(context: context)
                     if let source = session.trackedSource {
                         TrackedSourceBadge(source: source, projectId: session.projectId, context: context)
                     }
+                    // GitHub and the preview deployment, beside the ticket.
+                    WorkLinks(session: session)
                     if (context.map { model.isUnread(session, on: $0.host) } ?? model.isUnread(session)) { UnreadBadge() }
                     AttemptsMenu(session: session)
                     // Ask has no Changes pane, so its read-only boundary stays visible here.

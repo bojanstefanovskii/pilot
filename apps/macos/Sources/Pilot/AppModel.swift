@@ -47,7 +47,7 @@ final class AppModel: ObservableObject {
     let settings = AppSettings.shared
     let terminals = TerminalStore()
     /// Open local chats as tabs above the conversation.
-    let chatTabs = ChatTabs()
+    let chatsWorkspace = ChatsWorkspace()
     let notifier = Notifier()
     private var knownReadyPullRequests = Set<String>()
     var adoptedOperationIds: Set<String> = []
@@ -87,9 +87,6 @@ final class AppModel: ObservableObject {
             if let id = selectedSessionId, let ref = resourceRef(id, kind: .session) {
                 hosts.selection = ref
             } else if hosts.selection?.host == localHost { hosts.selection = nil }
-            if let id = selectedSessionId, oldValue != id, client.session(id) != nil {
-                chatTabs.opened(id, after: oldValue)
-            }
             // Leaving a chat lets the results read there regroup (Recent or Ready to merge).
             if oldValue != selectedSessionId, attention.leave(keeping: selectedSessionId) { reviewRevision += 1 }
             if oldValue != selectedSessionId {
@@ -1337,7 +1334,7 @@ final class AppModel: ObservableObject {
             openMission(missionId, tab: .overview, context: hosts.selection.map { HostViewContext(host: $0.host, hosts: hosts) })
             return
         }
-        if let session = selectedSession, !tab.isAvailable(for: session) { return }
+        if let session = focusedChat, !tab.isAvailable(for: session) { return }
         if inspectorVisible, inspectorTab == tab {
             // Closing the pane that has focus returns it to the composer (or the page), never to nothing.
             let hadFocus = keyboard.currentRegion() == .inspector

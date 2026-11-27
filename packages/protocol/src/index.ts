@@ -61,6 +61,11 @@ export interface SessionPullRequest {
 	stack?: PullRequestStack;
 	/** Merge readiness from the last successful health lookup. Absent until checked, or for terminal PRs. */
 	readiness?: PullRequestReadiness;
+	/**
+	 * Preview deployments of this PR (at most four, main one first), read from its description and bot comments while
+	 * it is open: URLs whose host names the PR (`pr-123.staging.example.com`) or a preview host (Vercel, Netlify).
+	 */
+	previews?: string[];
 }
 
 /** Sections of the Today page. */

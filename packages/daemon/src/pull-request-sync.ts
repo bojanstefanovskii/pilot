@@ -18,6 +18,8 @@ import {
 	type HealthResult,
 	linkedPullRequest,
 	lookupHealth,
+	lookupPreviews,
+	healthPerQuery,
 	lookupPullRequests,
 	type PullRequestProblems,
 	RateLimits,
@@ -57,6 +59,7 @@ const maxUrgentBatch = 8;
 const maxDelay = 30 * MINUTE;
 /** Safety net for a repository change the fingerprint missed. */
 const inspectionTtl = 10 * MINUTE;
+const PREVIEW_RETRY_MS = 10 * 60_000;
 type CheckedHealth = Extract<HealthResult, { problems: PullRequestProblems }>;
 
 export interface HealthCheck {
@@ -156,9 +159,12 @@ export class PullRequestSync<Session extends PullRequestSession, Context = unkno
 	private readonly inspections = new Map<string, { key: string; at: number; inspection: WorkspaceInspection }>();
 	private readonly jobs = new Set<Promise<void>>();
 	private readonly limits = new RateLimits();
+	/** Last preview-link lookup per open PR URL without a link yet. Bounded by pruning to the PRs seen this pass. */
+	private readonly previewChecks = new Map<string, number>();
 	private readonly runner: Runner;
 	private readonly base: number;
 	private readonly concurrency: number;
+	private readonly previewLinks: boolean;
 	private timer?: ReturnType<typeof setTimeout>;
 	private pumpQueued = false;
 	private reconcileAt = 0;
@@ -171,6 +177,7 @@ export class PullRequestSync<Session extends PullRequestSession, Context = unkno
 		this.runner = options.runner ?? run;
 		this.base = Math.max(1, options.intervalMs ?? MINUTE);
 		this.concurrency = Math.max(1, options.concurrency ?? 3);
+		this.previewLinks = options.previewLinks === true;
 	}
 
 	/** Check every known session and linked PR once, then keep them on their cadence. */
@@ -630,6 +637,7 @@ export class PullRequestSync<Session extends PullRequestSession, Context = unkno
 			if (this.stopped) break;
 			health.set(identity, await lookupHealth(request.repo, request.prs, request.cwd, this.runner, this.limits));
 		}
+		const previews = this.previewLinks ? await this.lookupPreviews(items) : new Map<string, string[]>();
 		// Reuse even the paginated fallback when the same PR is both branch- and mission-linked.
 		const resolved = new Map<string, CheckedHealth | undefined>();
 		const resolve = async (cwd: string, repo: Repository, pr: SessionPullRequest, branch?: string) => {
@@ -643,6 +651,9 @@ export class PullRequestSync<Session extends PullRequestSession, Context = unkno
 			result: Awaited<ReturnType<typeof resolve>>,
 			cached?: SessionPullRequest,
 		) => {
+			// Preview links are read once per PR and kept, through the merge too.
+			const links = previews.get(pr.url) ?? (cached?.url === pr.url ? cached.previews : undefined);
+			if (links?.length) pr.previews = links;
 			if (isTerminalPullRequest(pr)) return;
 			const readiness = result
 				? result.readiness
@@ -657,8 +668,10 @@ export class PullRequestSync<Session extends PullRequestSession, Context = unkno
 				const cached = new Map(sessionPullRequests(item.session).map((pr) => [pr.url, pr]));
 				if (item.repo && !item.result.error) {
 					for (const pr of [item.result.pullRequest, ...(item.result.others ?? [])]) {
-						if (!pr || isTerminalPullRequest(pr)) continue;
-						attach(pr, await resolve(item.session.cwd, item.repo, pr, plan?.branch), cached.get(pr.url));
+						if (!pr) continue;
+						// A merged PR keeps the preview links read while it was open.
+						if (isTerminalPullRequest(pr)) attach(pr, undefined, cached.get(pr.url));
+						else attach(pr, await resolve(item.session.cwd, item.repo, pr, plan?.branch), cached.get(pr.url));
 					}
 				}
 				let checks: HealthCheck[] | undefined;
@@ -700,6 +713,56 @@ export class PullRequestSync<Session extends PullRequestSession, Context = unkno
 	}
 
 	/** Batched health, falling back to the paginated single-PR lookup for very busy PRs. */
+	/**
+	 * Preview links of open PRs that have none yet, one request per repository and at most one try per PR every
+	 * ten minutes: CI posts the link a few minutes after the PR opens, and it does not change afterwards.
+	 */
+	private async lookupPreviews(
+		items: { session: Session; result: PullRequestResult; repo?: Repository }[],
+	): Promise<Map<string, string[]>> {
+		const found = new Map<string, string[]>();
+		const now = Date.now();
+		const seen = new Set<string>();
+		const byRepo = new Map<string, { repo: Repository; cwd: string; prs: SessionPullRequest[] }>();
+		for (const item of items) {
+			if (item.result.error || !item.repo) continue;
+			const cached = new Map(sessionPullRequests(item.session).map((pr) => [pr.url, pr]));
+			for (const pr of [item.result.pullRequest, ...(item.result.others ?? [])]) {
+				if (!pr || isTerminalPullRequest(pr) || cached.get(pr.url)?.previews?.length) continue;
+				seen.add(pr.url);
+				if (now - (this.previewChecks.get(pr.url) ?? 0) < PREVIEW_RETRY_MS) continue;
+				let group = byRepo.get(item.repo.identity);
+				if (!group) {
+					group = { repo: item.repo, cwd: item.session.cwd, prs: [] };
+					byRepo.set(item.repo.identity, group);
+				}
+				group.prs.push(pr);
+			}
+		}
+		for (const url of this.previewChecks.keys()) if (!seen.has(url)) this.previewChecks.delete(url);
+		for (const { repo, cwd, prs } of byRepo.values()) {
+			if (this.stopped) break;
+			const batch = prs.slice(0, healthPerQuery);
+			for (const pr of batch) this.previewChecks.set(pr.url, now);
+			try {
+				const links = await lookupPreviews(
+					repo,
+					batch.map((pr) => pr.number),
+					cwd,
+					this.runner,
+					this.limits,
+				);
+				for (const pr of batch) {
+					const urls = links.get(pr.number);
+					if (urls?.length) found.set(pr.url, urls);
+				}
+			} catch (error) {
+				warn(`could not look up preview links in ${repo.identity}`, error);
+			}
+		}
+		return found;
+	}
+
 	private async problems(
 		cwd: string,
 		repo: Repository,

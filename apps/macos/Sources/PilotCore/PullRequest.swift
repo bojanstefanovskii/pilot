@@ -34,10 +34,13 @@ public struct SessionPullRequest: Codable, Equatable, Hashable, Sendable {
     public let checkedAt: Double
     public let stack: PullRequestStack?
     public let readiness: PullRequestReadiness?
+    /// Preview deployments read from the PR's description and bot comments, main one first.
+    public let previews: [String]?
 
     public init(number: Int, url: String, title: String, state: PullRequestState, checkedAt: Double,
                 branch: String? = nil, mergedAt: Double? = nil, stack: PullRequestStack? = nil,
-                readiness: PullRequestReadiness? = nil, createdAt: Double? = nil) {
+                readiness: PullRequestReadiness? = nil, createdAt: Double? = nil, previews: [String]? = nil) {
+        self.previews = previews
         self.number = number
         self.url = url
         self.title = title
@@ -65,6 +68,15 @@ public struct SessionPullRequest: Codable, Equatable, Hashable, Sendable {
               parts.user == nil, parts.password == nil
         else { return nil }
         return parts.url
+    }
+
+    /// Preview links safe to open: https only, no credentials.
+    public var previewURLs: [URL] {
+        (previews ?? []).compactMap { link in
+            guard let parts = URLComponents(string: link), parts.scheme?.lowercased() == "https",
+                  parts.host?.isEmpty == false, parts.user == nil, parts.password == nil else { return nil }
+            return parts.url
+        }
     }
 
     public var checkedDate: Date? {
@@ -170,6 +182,11 @@ extension SessionSummary {
 
     /// The PR ⌘⇧P opens: the newest open one, else the newest of any state. GitHub numbers grow with each new PR,
     /// so the highest number is the latest. PRs whose URL is unsafe to open are skipped.
+    /// Preview links of the newest PR that has some.
+    public var previewURLs: [URL] {
+        linkedPullRequests.sorted { $0.number > $1.number }.lazy.map(\.previewURLs).first { !$0.isEmpty } ?? []
+    }
+
     public var latestPullRequest: SessionPullRequest? {
         let prs = linkedPullRequests.filter { $0.browserURL != nil }
         return prs.filter { !$0.isTerminal }.max { $0.number < $1.number } ?? prs.max { $0.number < $1.number }

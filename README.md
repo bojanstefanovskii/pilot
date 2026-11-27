@@ -148,7 +148,8 @@ the daemon report; check, sign-in and setup actions are not included. See the
   **Done** on the Missions, Features and Quick fixes boards. **Write summary** (on a merged chat or done mission,
   and in the actions menus) asks the agent to write what was done as an artifact; for a mission the coordinator
   writes it and attaches it to the mission. It never runs on its own.
-- **Chats as tabs.** Every chat you open gets a tab above the conversation, Ghostty-style, with its status mark.
+- **Links out.** Beside a chat's Linear ticket, its toolbar and its Features card link to the GitHub pull request and its preview deployment. Pilot reads preview links once per open PR from its description and CI comments (hosts naming the PR, like `pr-123.staging.example.com`, or Vercel and Netlify previews) and keeps them after the merge.
+- **Chats as a terminal workspace.** The Chats page opens chats as horizontal tabs, Ghostty-style: ⌘T opens a tab, ⌘D splits right and ⌥⌘D splits down (up to four panes), ⌥⌘← and ⌥⌘→ move between panes, ⌥⌘W closes a pane, ⌘1–⌘9 and ⌘⇧[ ⌘⇧] switch tabs. An empty pane starts a chat or opens an existing one; the inspector follows the focused pane. Tabs and splits are kept across launches.
   ⌘1…⌘9 jump to a tab, ⌘⇧[ and ⌘⇧] move between them, ⌥⌘W closes one. Tabs are kept across launches (at most 12).
 - **Pick up where you left off.** Workflow pages (Today, Sprint, Database, Notes…) keep their project, filters,
   drafts and loaded data while the app runs, and Back returns to the page you left.

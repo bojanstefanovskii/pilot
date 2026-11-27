@@ -1683,7 +1683,7 @@ export class SessionManager {
 					},
 				},
 			},
-			pullRequests,
+			{ previewLinks: true, ...pullRequests },
 		);
 	}
 

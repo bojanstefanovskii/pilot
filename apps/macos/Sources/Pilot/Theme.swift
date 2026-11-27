@@ -177,7 +177,8 @@ enum Theme {
 
 extension Font {
     /// A font from the chrome type scale. See `Theme.TextRole`.
-    static func pilot(_ role: Theme.TextRole, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+    /// No design by default, so a page can switch its whole type with `.fontDesign` (the Chats page is monospaced).
+    static func pilot(_ role: Theme.TextRole, weight: Font.Weight = .regular, design: Font.Design? = nil) -> Font {
         .system(size: role.size, weight: weight, design: design)
     }
 }

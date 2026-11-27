@@ -224,9 +224,7 @@ private struct ChatCard: View {
             HStack(spacing: 8) {
                 Text(stateText).font(.pilot(.caption, weight: done ? .medium : .regular))
                     .foregroundStyle(done ? Theme.done : signal?.tint ?? Theme.mutedForeground)
-                if let pr = session.latestPullRequest {
-                    Label("#\(pr.number)", icon: PilotIcon.pullRequest).font(.pilot(.caption)).foregroundStyle(Theme.mutedForeground)
-                }
+                WorkLinks(session: session)
                 Spacer()
                 Text(RelativeDate.ago(done ? session.doneAt ?? session.updatedAt : session.updatedAt))
                     .font(.pilot(.caption)).foregroundStyle(Theme.faintForeground)

@@ -67,21 +67,29 @@ import Testing
     #expect(app.workflowPage == .features && app.selectedSessionId == nil)
 }
 
-@Test @MainActor func chatTabsOpenAfterTheCurrentTabStayBoundedAndCloseToANeighbour() {
-    let tabs = ChatTabs(defaults: UserDefaults(suiteName: "chat-tabs-\(UUID())")!)
-    tabs.opened("a", after: nil)
-    tabs.opened("b", after: "a")
-    tabs.opened("c", after: "a")
-    #expect(tabs.ids == ["a", "c", "b"])
-    tabs.opened("a", after: "b")
-    #expect(tabs.ids == ["a", "c", "b"])
-    #expect(tabs.neighbour(of: "b", offset: 1) == "a")
-    #expect(tabs.neighbour(of: "a", offset: -1) == "b")
-    #expect(tabs.close("c") == "b")
-    #expect(tabs.close("b") == "a")
-    #expect(tabs.close("a") == nil)
-    for n in 0..<20 { tabs.opened("chat-\(n)", after: nil) }
-    #expect(tabs.ids.count == ChatTabs.limit && tabs.ids.last == "chat-19")
+@Test @MainActor func chatsWorkspaceOpensTabsSplitsPanesAndClosesThem() {
+    let defaults = UserDefaults(suiteName: "chats-workspace-\(UUID())")!
+    let workspace = ChatsWorkspace(defaults: defaults)
+    workspace.open("a")
+    workspace.open("b")
+    #expect(workspace.tabs.count == 2 && workspace.focusedSessionId == "b")
+    // Opening a chat already in a tab selects it instead of duplicating it.
+    workspace.open("a")
+    #expect(workspace.tabs.count == 2 && workspace.focusedSessionId == "a")
+    // A split opens an empty pane that the next chat fills.
+    workspace.split(vertical: false)
+    #expect(workspace.selectedTab?.panes.count == 2 && workspace.focusedSessionId == nil)
+    workspace.open("c")
+    #expect(workspace.tabs.count == 2 && workspace.visibleSessionIds == ["a", "c"])
+    for _ in 0..<5 { workspace.split(vertical: true) }
+    #expect(workspace.selectedTab?.panes.count == ChatsWorkspace.paneLimit && workspace.selectedTab?.vertical == false)
+    // Kept across launches.
+    #expect(ChatsWorkspace(defaults: defaults).tabs == workspace.tabs)
+    // Gone chats close their panes; a tab with no pane left closes.
+    workspace.prune(keeping: ["c"])
+    #expect(workspace.tabs.count == 1 && workspace.visibleSessionIds == ["c"])
+    workspace.closeTab(workspace.tabs[0].id)
+    #expect(workspace.tabs.isEmpty && workspace.selectedTab == nil)
 }
 
 @Test func linearClosedTicketsMarkChatsDoneWithoutAnOpenPullRequest() {

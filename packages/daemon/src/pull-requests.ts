@@ -66,6 +66,11 @@ export interface PullRequestOptions {
 	intervalMs?: number;
 	/** Concurrent sync jobs, and so concurrent git, jj and gh processes. Defaults to 3. */
 	concurrency?: number;
+	/**
+	 * Also read preview links of open PRs that have none yet: one more GitHub request per repository, at most every
+	 * ten minutes per PR, and none once every PR has its link. Off by default; the daemon turns it on.
+	 */
+	previewLinks?: boolean;
 }
 
 export function isTerminalPullRequest(pr: SessionPullRequest | undefined): boolean {

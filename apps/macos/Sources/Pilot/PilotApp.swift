@@ -42,14 +42,14 @@ struct PilotApp: App {
                 Divider()
                 Button("Toggle Files") { model.toggleInspector(.files) }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
-                    .disabled(model.selectedSessionId == nil || model.selectedSession?.isAsk == true)
+                    .disabled(model.focusedChat?.isAsk != false)
                 Button("Toggle Terminal") { model.toggleInspector(.terminal) }
                     .keyboardShortcut("j", modifiers: .command)
-                    .disabled(model.selectedSessionId == nil || model.selectedSession?.isAsk == true)
+                    .disabled(model.focusedChat?.isAsk != false)
                 Button("Toggle Artifacts") { model.toggleInspector(.artifacts) }
-                    .disabled(model.selectedSessionId == nil)
+                    .disabled(model.focusedChat == nil)
                 Button("Toggle Links") { model.toggleInspector(.links) }
-                    .disabled(model.selectedSessionId == nil)
+                    .disabled(model.focusedChat == nil)
                 Divider()
                 Button("Open Latest Pull Request") { model.openLatestPullRequest() }
                     .keyboardShortcut("p", modifiers: [.command, .shift])
@@ -64,7 +64,7 @@ struct PilotApp: App {
             }
             SidebarScopeCommands(model: model, client: model.client)
             KeyboardNavigationCommands(model: model)
-            ChatTabCommands(model: model)
+            ChatsWorkspaceCommands(model: model)
             KeyboardShortcutsCommands(model: model)
         }
 
